@@ -1,0 +1,8 @@
+{
+    "NGINX": "http://nginx.org/download/nginx-1.24.0.zip",
+    "APACHE": "https://www.apachelounge.com/download/VS17/binaries/httpd-2.4.58-win64-VS17.zip",
+    "APACHE_FCGI": "https://www.apachelounge.com/download/VS17/modules/mod_fcgid-2.3.10-win64-VS17.zip",
+    "PHP": "https://windows.php.net/downloads/releases/archives/",
+    "PHP_RELEASE": "https://windows.php.net/downloads/releases/",
+    "XDEBUG": "https://xdebug.org/files/"
+}
