@@ -90,7 +90,8 @@ if ($installPhp -eq 1) {
             $phpBaseFile = $phpData.name;
             if ($phpData.download -eq "release") {
                 $url = "${baseUrlPhpRelease}${phpBaseFile}";
-            } else {
+            }
+            else {
                 $url = "${baseUrlPhp}${phpBaseFile}";
             }
             $tmpDownload = "${tmpDir}${phpBaseFile}";
@@ -98,7 +99,8 @@ if ($installPhp -eq 1) {
             if ($downloadPhp -eq 1) {
                 Write-Output("Download ${phpBaseFile} to ${tmpDir}");
                 Invoke-WebRequest -Uri $url -OutFile $tmpDownload;
-            } elseif (-not(Test-Path -Path $tmpDownload)) {
+            }
+            elseif (-not(Test-Path -Path $tmpDownload)) {
                 Write-Output("Not Found. Download ${phpBaseFile} to ${tmpDir}");
                 Invoke-WebRequest -Uri $url -OutFile $tmpDownload;
             }
@@ -183,17 +185,33 @@ if ($installApache -eq 1) {
     $urlApache = $baseUrl.APACHE;
     $urlApacheFcgi = $baseUrl.APACHE_FCGI;
 
-    Write-Output("Download APACHE");
     $tmpDownload = "${tmpDir}";
+    $tmpDownloadApache = "${tmpDownload}/APACHE.zip";
+    $tmpDownloadApacheFcgi = "${tmpDownload}/APACHE_FCGI.zip";
+
     if ($downloadApache -eq 1) {
+        Write-Output("Download APACHE");
         # Invoke-WebRequest -Uri $urlApache -OutFile "${tmpDownload}/APACHE.zip";
         # Invoke-WebRequest -Uri $urlApache -OutFile "${tmpDownload}/APACHE_FCGI.zip";
 
         $WebClient = New-Object System.Net.WebClient;
-        $WebClient.DownloadFile($urlApache, "${tmpDownload}/APACHE.zip");
+        $WebClient.DownloadFile($urlApache, $tmpDownloadApache);
 
         $WebClient = New-Object System.Net.WebClient;
-        $WebClient.DownloadFile($urlApacheFcgi, "${tmpDownload}/APACHE_FCGI.zip");
+        $WebClient.DownloadFile($urlApacheFcgi, $tmpDownloadApacheFcgi);
+    }
+    else {
+        if (-not(Test-Path -Path $tmpDownloadApache)) {
+            Write-Output("Not Found. Download APACHE to ${tmpDownloadApache}");
+            $WebClient = New-Object System.Net.WebClient;
+            $WebClient.DownloadFile($urlApache, $tmpDownloadApache);
+        }
+        
+        if (-not(Test-Path -Path $tmpDownloadApacheFcgi)) {
+            Write-Output("Not Found. Download APACHE FCGI to ${tmpDownloadApacheFcgi}");
+            $WebClient = New-Object System.Net.WebClient;
+            $WebClient.DownloadFile($urlApacheFcgi, $tmpDownloadApacheFcgi);
+        }
     }
 
     $dirTmpApache = "${tmpDownload}/APACHE";
@@ -204,7 +222,7 @@ if ($installApache -eq 1) {
         Remove-Item -Recurse $dirTmpApache;
         mkdir $dirTmpApache;
     }
-    Expand-Archive -Path "${tmpDownload}/APACHE.zip" -DestinationPath $dirTmpApache;
+    Expand-Archive -Path $tmpDownloadApache -DestinationPath $dirTmpApache;
     
     $dirTmpApacheSub = Get-ChildItem -Path $dirTmpApache -Directory -Name;
     Move-Item "${dirTmpApache}/${dirTmpApacheSub}" $apacheDir;
@@ -217,22 +235,23 @@ if ($installApache -eq 1) {
         Remove-Item -Recurse $dirTmpApacheFcgi;
         mkdir $dirTmpApacheFcgi;
     }
-    Expand-Archive -Path "${tmpDownload}/APACHE_FCGI.zip" -DestinationPath $dirTmpApacheFcgi;
+    Expand-Archive -Path $tmpDownloadApacheFcgi -DestinationPath $dirTmpApacheFcgi;
 
     Move-Item "${dirTmpApacheFcgi}/mod_fcgid.so" "${apacheDir}/modules/mod_fcgid.so";
 
     # Config APACHE
-    Move-Item "${apacheDir}conf/httpd.conf" "${apacheDir}conf/httpd.conf.tmp";
-    Copy-Item .\source\httpd.conf "${apacheDir}conf/httpd.conf"
+    $httpdConf = "${apacheDir}conf/httpd.conf";
+    Move-Item $httpdConf "${httpdConf}.tmp";
+    Copy-Item .\source\httpd.conf $httpdConf
 
     $apacheDirRevert = $apacheDir -replace "\\", '/';
     $search = "{{ROOT}}";
     $replace = $apacheDirRevert;
-    (Get-Content -Path "${apacheDir}conf/httpd.conf") -replace $search, $replace | Set-Content "${apacheDir}conf/httpd.conf";
+    (Get-Content -Path $httpdConf) -replace $search, $replace | Set-Content $httpdConf;
 
     $search = "Listen 80";
     $replace = "Listen 80";
-    $modifyFile = "${apacheDir}conf/httpd.conf";
+    $modifyFile = $httpdConf;
     for ($i = 0; $i -lt $whatToInstall.Count; $i++) {
         $version = $whatToInstall[$i];
         $phpData = $phpSourceVersions.NTS.$version;
@@ -241,17 +260,18 @@ if ($installApache -eq 1) {
     }
     (Get-Content -Path $modifyFile) -replace $search, $replace | Set-Content $modifyFile;
 
-    Move-Item "${apacheDir}conf/extra/httpd-vhosts.conf" "${apacheDir}conf/extra/httpd-vhosts.conf.tmp";
-    Copy-Item .\source\httpd-vhosts.conf "${apacheDir}conf/extra/httpd-vhosts.conf";
+    $httpdVhostConf = "${apacheDir}conf/extra/httpd-vhosts.conf";
+    Move-Item $httpdVhostConf "${apacheDir}conf/extra/httpd-vhosts.conf.tmp";
+    Copy-Item .\source\httpd-vhosts.conf $httpdVhostConf;
 
     $search = "{{HTDOCS}}";
     $replace = $htdocs -replace "\\", '/';
-    $modifyFile = "${apacheDir}conf/extra/httpd-vhosts.conf";
+    $modifyFile = $httpdVhostConf;
     (Get-Content -Path $modifyFile) -replace $search, $replace | Set-Content $modifyFile;
 
     $search = "{{PHP}}";
     $replace = $phpDir -replace "\\", '/';
-    $modifyFile = "${apacheDir}conf/extra/httpd-vhosts.conf";
+    $modifyFile = $httpdVhostConf;
     (Get-Content -Path $modifyFile) -replace $search, $replace | Set-Content $modifyFile;
 
     mkdir "${apacheDir}conf/extra/host/";
