@@ -1,0 +1,16 @@
+{
+    "base": [
+        "# ADDED CONFIG",
+        "memory_limit = 300M",
+        "upload_max_filesize = 16M",
+        "post_max_size = 16M",
+        "max_input_time = -1",
+        "max_execution_time = 300",
+        "request_terminate_timeout = 300",
+        "log_errors = On",
+        "display_errors = On",
+        "error_reporting = E_ALL & ~E_DEPRECATED & ~E_STRICT",
+        "date.timezone = \"Asia/Jakarta\"",
+        "error_log = {PHP_INSTALL_DIR}php-errors_{VERSION}.log"
+    ]
+}

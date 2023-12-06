@@ -15,7 +15,8 @@ $whatToInstall = @(
     "v7.4",
     "v8.0",
     "v8.1",
-    "v8.2"
+    "v8.2",
+    "v8.3"
 );
 
 # TS >> Apache with mod_php
@@ -58,11 +59,15 @@ if ($installVCRedist -eq 1) {
 }
 
 $baseUrl = Get-Content .\source\baseUrl.json | Out-String | ConvertFrom-Json;
-$phpSource = Get-Content .\source\php.json | Out-String | ConvertFrom-Json;
 
 $baseUrlPhp = $baseUrl.PHP;
 $baseUrlPhpRelease = $baseUrl.PHP_RELEASE;
 $baseUrlXdebug = $baseUrl.XDEBUG;
+
+$phpSourceVersions = Get-Content .\source\php-versions.json | Out-String | ConvertFrom-Json;
+$phpSourceConfigExtension = Get-Content .\source\php-config-extension.json | Out-String | ConvertFrom-Json;
+$phpSourceConfigBase = Get-Content .\source\php-config-base.json | Out-String | ConvertFrom-Json;
+$phpSourceConfigXdebug = Get-Content .\source\php-config-xdebug.json | Out-String | ConvertFrom-Json;
 
 $ProgressPreference = 'SilentlyContinue';
 
@@ -79,7 +84,7 @@ if ($installPhp -eq 1) {
                 $phpInstallDir = $phpTSDir
             }
 
-            $phpData = $phpSource.$type.$version;
+            $phpData = $phpSourceVersions.$type.$version;
         
             # Download PHP
             $phpBaseFile = $phpData.name;
@@ -115,29 +120,38 @@ if ($installPhp -eq 1) {
 
             # Copy Config
             Write-Output("Create Config php.ini");
-            Copy-Item "${phpDirExtract}\${phpBaseConfig}" "${phpDirExtract}\php.ini";
+            $phpIni = "${phpDirExtract}\php.ini";
+            Copy-Item "${phpDirExtract}\${phpBaseConfig}" $phpIni;
 
             # Config Replace 
             $typeConfig = $phpData.config;
-            $findReplace = $phpSource.CONFIG.replace.$typeConfig;
+            $findReplace = $phpSourceConfigExtension.$typeConfig;
             foreach ($value in $findReplace) {
                 $search = $value[0];
                 $replace = $value[1];
-                (Get-Content -Path "${phpDirExtract}\php.ini") -replace $search, $replace | Set-Content "${phpDirExtract}\php.ini";
+                (Get-Content -Path $phpIni) -replace $search, $replace | Set-Content $phpIni;
             }
 
             # Config Add
-            $copyConfig = $phpSource.CONFIG.base;
+            $copyConfig = $phpSourceConfigBase.base;
             foreach ($value in $copyConfig) {
                 $string = $value;
-                Add-Content -Path "${phpDirExtract}\php.ini" -Value $string;
+                Add-Content -Path $phpIni -Value $string;
             }
 
+            $search = "{PHP_INSTALL_DIR}";
+            $replace = "${phpInstallDir}";
+            (Get-Content -Path $phpIni) -replace $search, $replace | Set-Content $phpIni;
+
+            $search = "{VERSION}";
+            $replace = "${phpVersionDir}";
+            (Get-Content -Path $phpIni) -replace $search, $replace | Set-Content $phpIni;
+
             if ($installXdebug -eq 1) {
-                $copyConfigXdebug = $phpSource.CONFIG.$typeConfig;
+                $copyConfigXdebug = $phpSourceConfigXdebug.$typeConfig;
                 foreach ($value in $copyConfigXdebug) {
                     $string = $value;
-                    Add-Content -Path "${phpDirExtract}\php.ini" -Value $string;
+                    Add-Content -Path $phpIni -Value $string;
                 }
 
                 # Install Xdebug
@@ -153,7 +167,7 @@ if ($installPhp -eq 1) {
 
                 $search = "php_xdebug.dll";
                 $replace = "${phpDirExtract}ext\php_xdebug.dll";
-                (Get-Content -Path "${phpDirExtract}\php.ini") -replace $search, $replace | Set-Content "${phpDirExtract}\php.ini";
+                (Get-Content -Path $phpIni) -replace $search, $replace | Set-Content $phpIni;
             }
             
         }
@@ -221,7 +235,7 @@ if ($installApache -eq 1) {
     $modifyFile = "${apacheDir}conf/httpd.conf";
     for ($i = 0; $i -lt $whatToInstall.Count; $i++) {
         $version = $whatToInstall[$i];
-        $phpData = $phpSource.NTS.$version;
+        $phpData = $phpSourceVersions.NTS.$version;
         $alias = $phpData.alias
         $replace = "${replace}`nListen 80${alias}";
     }
