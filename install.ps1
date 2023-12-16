@@ -124,6 +124,7 @@ if ($installPhp -eq 1) {
             Write-Output("Create Config php.ini");
             $phpIni = "${phpDirExtract}\php.ini";
             Copy-Item "${phpDirExtract}\${phpBaseConfig}" $phpIni;
+            Copy-Item "${phpDirExtract}\php.exe" "${phpDirExtract}\php${phpVersionDir}.exe"
 
             # Config Replace 
             $typeConfig = $phpData.config;

@@ -1,6 +1,6 @@
 {
     "base": [
-        "# ADDED CONFIG",
+        "; ADDED CONFIG",
         "memory_limit = 300M",
         "upload_max_filesize = 16M",
         "post_max_size = 16M",
