@@ -278,6 +278,8 @@ if ($installApache -eq 1) {
     mkdir "${apacheDir}conf/extra/host/";
     Copy-Item -Path .\source\host\* -Destination "${apacheDir}conf/extra/host/" -Recurse;
 
+    Copy-Item -Path .\source\registerApache.ps1 "${apacheDir}\bin\registerApache.ps1";
+    Copy-Item -Path .\source\unistallAPache.ps1 "${apacheDir}\bin\unistallAPache.ps1";
 }
 
 if ($cleanTmpDir -eq 1) {

@@ -1,0 +1,1 @@
+.\httpd.exe -k uninstall -n "Apache24"
