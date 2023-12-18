@@ -3,6 +3,7 @@
 [bool]$installPhp = 1;
 [bool]$downloadPhp = 1;
 [bool]$installXdebug = 1;
+[bool]$phpPathGenerate = 0;
 
 $whatToInstall = @(
     "v5.4",
@@ -46,6 +47,8 @@ $htdocs = "${installDir}\apache\htdocs";
 # $htdocs = "${installDir}\www";
 
 ###################################END MANUAL CONFIG################################################
+$phpPath = '';
+
 $tmpDir = "${PWD}\tmp\";
 if (-not(Test-Path -Path $tmpDir)) {
     Write-Output("Create TMP");
@@ -107,7 +110,7 @@ if ($installPhp -eq 1) {
 
             # Extract PHP
             $phpVersionDir = $phpData.alias;
-            $phpDirExtract = "${phpInstallDir}${phpVersionDir}/";
+            $phpDirExtract = "${phpInstallDir}${phpVersionDir}\";
         
             if (-not(Test-Path -Path $phpDirExtract)) {
                 mkdir $phpDirExtract;
@@ -173,6 +176,8 @@ if ($installPhp -eq 1) {
                 (Get-Content -Path $phpIni) -replace $search, $replace | Set-Content $phpIni;
             }
             
+            $tmpPath = $phpPath;
+            $phpPath = $phpDirExtract + ";" + $tmpPath;
         }
     }
 }
@@ -284,4 +289,10 @@ if ($installApache -eq 1) {
 
 if ($cleanTmpDir -eq 1) {
     Remove-Item -Recurse $tmpDir; 
+}
+
+if ($phpPathGenerate) {
+    Write-Output("######################################################################################################");
+    Write-Output("Generated PHP Path");
+    Write-Output($phpPath);
 }
