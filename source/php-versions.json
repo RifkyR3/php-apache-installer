@@ -56,21 +56,21 @@
             "download": "release"
         },
         "v8.1": {
-            "name": "php-8.1.26-Win32-vs16-x64.zip",
+            "name": "php-8.1.27-Win32-vs16-x64.zip",
             "xdebug": "php_xdebug-3.3.1-8.1-vs16-x86_64.dll",
             "alias": "81",
             "config": "new",
             "download": "release"
         },
         "v8.2": {
-            "name": "php-8.2.13-Win32-vs16-x64.zip",
+            "name": "php-8.2.14-Win32-vs16-x64.zip",
             "xdebug": "php_xdebug-3.3.1-8.2-vs16-x86_64.dll",
             "alias": "82",
             "config": "new",
             "download": "release"
         },
         "v8.3": {
-            "name": "php-8.3.0-Win32-vs16-x64.zip",
+            "name": "php-8.3.1-Win32-vs16-x64.zip",
             "xdebug": "php_xdebug-3.3.1-8.3-vs16-x86_64.dll",
             "alias": "83",
             "config": "new",
@@ -134,21 +134,21 @@
             "download": "release"
         },
         "v8.1": {
-            "name": "php-8.1.26-nts-Win32-vs16-x64.zip",
+            "name": "php-8.1.27-nts-Win32-vs16-x64.zip",
             "xdebug": "php_xdebug-3.3.1-8.1-vs16-nts-x86_64.dll",
             "alias": "81",
             "config": "new",
             "download": "release"
         },
         "v8.2": {
-            "name": "php-8.2.13-nts-Win32-vs16-x64.zip",
+            "name": "php-8.2.14-nts-Win32-vs16-x64.zip",
             "xdebug": "php_xdebug-3.3.1-8.2-vs16-nts-x86_64.dll",
             "alias": "82",
             "config": "new",
             "download": "release"
         },
         "v8.3": {
-            "name": "php-8.3.0-nts-Win32-vs16-x64.zip",
+            "name": "php-8.3.1-nts-Win32-vs16-x64.zip",
             "xdebug": "php_xdebug-3.3.1-8.3-vs16-nts-x86_64.dll",
             "alias": "83",
             "config": "new",

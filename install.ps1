@@ -5,6 +5,8 @@
 [bool]$installXdebug = 1;
 [bool]$phpPathGenerate = 0;
 
+[bool]$installComposer = 1;
+
 $whatToInstall = @(
     "v5.4",
     "v5.5",
@@ -22,10 +24,8 @@ $whatToInstall = @(
 
 # TS >> Apache with mod_php
 # NTS >> IIS and other FastCGI or Apache with mod_fastcgi
-$typeToInstall = @(
-    # "TS", 
-    "NTS"
-);
+# $typeToInstall = "TS";
+$typeToInstall = "NTS";
 
 [bool]$installApache = 1;
 [bool]$downloadApache = 1;
@@ -39,7 +39,6 @@ $installDir = ${PWD};
 # Variable
 $apacheDir = "${installDir}\apache\";
 $nginxDir = "${installDir}\nginx\";
-$phpTSDir = "${installDir}\PHP_TS\";
 $phpDir = "${installDir}\PHP\";
 $phpBaseConfig = "php.ini-development";
 
@@ -66,6 +65,8 @@ $baseUrl = Get-Content .\source\baseUrl.json | Out-String | ConvertFrom-Json;
 $baseUrlPhp = $baseUrl.PHP;
 $baseUrlPhpRelease = $baseUrl.PHP_RELEASE;
 $baseUrlXdebug = $baseUrl.XDEBUG;
+$baseUrlComposer = $baseUrl.COMPOSER;
+$baseUrlComposerLts = $baseUrl.COMPOSER_LTS;
 
 $phpSourceVersions = Get-Content .\source\php-versions.json | Out-String | ConvertFrom-Json;
 $phpSourceConfigExtension = Get-Content .\source\php-config-extension.json | Out-String | ConvertFrom-Json;
@@ -74,111 +75,128 @@ $phpSourceConfigXdebug = Get-Content .\source\php-config-xdebug.json | Out-Strin
 
 $ProgressPreference = 'SilentlyContinue';
 
+$composer = "composer.phar";
+$composerLts = "composer-lts.phar";
+$composerMinimumVersion = 72;
+
+$tmpComposer = "${tmpDir}${composer}";
+$tmpComposerLts = "${tmpDir}${composerLts}";
+
+if ($installComposer -eq 1) {
+    Invoke-WebRequest -Uri $baseUrlComposer -OutFile $tmpComposer;
+    Invoke-WebRequest -Uri $baseUrlComposerLts -OutFile $tmpComposerLts;
+}
+
 # Install php
 if ($installPhp -eq 1) {
     for ($i = 0; $i -lt $whatToInstall.Count; $i++) {
         $version = $whatToInstall[$i];
 
-        for ($j = 0; $j -lt $typeToInstall.Count; $j++) {
-            $type = $typeToInstall[$j];
+        $type = $typeToInstall;
+        $phpInstallDir = $phpDir;
 
-            $phpInstallDir = $phpDir;
-            if ([string]$type -eq 'TS') {
-                $phpInstallDir = $phpTSDir
-            }
-
-            $phpData = $phpSourceVersions.$type.$version;
+        $phpData = $phpSourceVersions.$type.$version;
         
-            # Download PHP
-            $phpBaseFile = $phpData.name;
-            if ($phpData.download -eq "release") {
-                $url = "${baseUrlPhpRelease}${phpBaseFile}";
-            }
-            else {
-                $url = "${baseUrlPhp}${phpBaseFile}";
-            }
-            $tmpDownload = "${tmpDir}${phpBaseFile}";
+        # Download PHP
+        $phpBaseFile = $phpData.name;
+        if ($phpData.download -eq "release") {
+            $url = "${baseUrlPhpRelease}${phpBaseFile}";
+        }
+        else {
+            $url = "${baseUrlPhp}${phpBaseFile}";
+        }
+        $tmpDownload = "${tmpDir}${phpBaseFile}";
 
-            if ($downloadPhp -eq 1) {
-                Write-Output("Download ${phpBaseFile} to ${tmpDir}");
-                Invoke-WebRequest -Uri $url -OutFile $tmpDownload;
-            }
-            elseif (-not(Test-Path -Path $tmpDownload)) {
-                Write-Output("Not Found. Download ${phpBaseFile} to ${tmpDir}");
-                Invoke-WebRequest -Uri $url -OutFile $tmpDownload;
-            }
+        if ($downloadPhp -eq 1) {
+            Write-Output("Download ${phpBaseFile} to ${tmpDir}");
+            Invoke-WebRequest -Uri $url -OutFile $tmpDownload;
+        }
+        elseif (-not(Test-Path -Path $tmpDownload)) {
+            Write-Output("Not Found. Download ${phpBaseFile} to ${tmpDir}");
+            Invoke-WebRequest -Uri $url -OutFile $tmpDownload;
+        }
 
-            # Extract PHP
-            $phpVersionDir = $phpData.alias;
-            $phpDirExtract = "${phpInstallDir}${phpVersionDir}\";
+        # Extract PHP
+        $phpVersionDir = $phpData.alias;
+        $phpDirExtract = "${phpInstallDir}${phpVersionDir}\";
         
-            if (-not(Test-Path -Path $phpDirExtract)) {
-                mkdir $phpDirExtract;
-            }
-            else {
-                Remove-Item -Recurse $phpDirExtract;
-                mkdir $phpDirExtract;
-            }
+        if (-not(Test-Path -Path $phpDirExtract)) {
+            mkdir $phpDirExtract;
+        }
+        else {
+            Remove-Item -Recurse $phpDirExtract;
+            mkdir $phpDirExtract;
+        }
 
-            Write-Output("Extract ${phpBaseFile} to ${phpDirExtract}");
-            Expand-Archive -Path $tmpDownload -DestinationPath $phpDirExtract;
+        Write-Output("Extract ${phpBaseFile} to ${phpDirExtract}");
+        Expand-Archive -Path $tmpDownload -DestinationPath $phpDirExtract;
 
-            # Copy Config
-            Write-Output("Create Config php.ini");
-            $phpIni = "${phpDirExtract}\php.ini";
-            Copy-Item "${phpDirExtract}\${phpBaseConfig}" $phpIni;
-            Copy-Item "${phpDirExtract}\php.exe" "${phpDirExtract}\php${phpVersionDir}.exe"
+        # Copy Config
+        Write-Output("Create Config php.ini");
+        $phpIni = "${phpDirExtract}\php.ini";
+        Copy-Item "${phpDirExtract}\${phpBaseConfig}" $phpIni;
+        Copy-Item "${phpDirExtract}\php.exe" "${phpDirExtract}\php${phpVersionDir}.exe"
 
-            # Config Replace 
-            $typeConfig = $phpData.config;
-            $findReplace = $phpSourceConfigExtension.$typeConfig;
-            foreach ($value in $findReplace) {
-                $search = $value[0];
-                $replace = $value[1];
+        # Config Replace 
+        $typeConfig = $phpData.config;
+        $findReplace = $phpSourceConfigExtension.$typeConfig;
+        foreach ($value in $findReplace) {
+            $search = $value[0];
+            $replace = $value[1];
                 (Get-Content -Path $phpIni) -replace $search, $replace | Set-Content $phpIni;
-            }
+        }
 
-            # Config Add
-            $copyConfig = $phpSourceConfigBase.base;
-            foreach ($value in $copyConfig) {
+        # Config Add
+        $copyConfig = $phpSourceConfigBase.base;
+        foreach ($value in $copyConfig) {
+            $string = $value;
+            Add-Content -Path $phpIni -Value $string;
+        }
+
+        $search = "{PHP_INSTALL_DIR}";
+        $replace = "${phpInstallDir}";
+            (Get-Content -Path $phpIni) -replace $search, $replace | Set-Content $phpIni;
+
+        $search = "{VERSION}";
+        $replace = "${phpVersionDir}";
+            (Get-Content -Path $phpIni) -replace $search, $replace | Set-Content $phpIni;
+
+        if ($installXdebug -eq 1) {
+            $copyConfigXdebug = $phpSourceConfigXdebug.$typeConfig;
+            foreach ($value in $copyConfigXdebug) {
                 $string = $value;
                 Add-Content -Path $phpIni -Value $string;
             }
 
-            $search = "{PHP_INSTALL_DIR}";
-            $replace = "${phpInstallDir}";
-            (Get-Content -Path $phpIni) -replace $search, $replace | Set-Content $phpIni;
+            # Install Xdebug
+            $phpXdebug = $phpData.xdebug;
+            $url = "${baseUrlXdebug}${phpXdebug}";
+            $tmpDownloadXdebug = "${tmpDir}${phpXdebug}";
 
-            $search = "{VERSION}";
-            $replace = "${phpVersionDir}";
-            (Get-Content -Path $phpIni) -replace $search, $replace | Set-Content $phpIni;
-
-            if ($installXdebug -eq 1) {
-                $copyConfigXdebug = $phpSourceConfigXdebug.$typeConfig;
-                foreach ($value in $copyConfigXdebug) {
-                    $string = $value;
-                    Add-Content -Path $phpIni -Value $string;
-                }
-
-                # Install Xdebug
-                $phpXdebug = $phpData.xdebug;
-                $url = "${baseUrlXdebug}${phpXdebug}";
-                $tmpDownloadXdebug = "${tmpDir}${phpXdebug}";
-
-                Write-Output("Install ${phpXdebug}");
-                if (-not(Test-Path -Path $tmpDownloadXdebug)) {
-                    Invoke-WebRequest -Uri $url -OutFile $tmpDownloadXdebug;
-                }
-                Copy-Item "${tmpDownloadXdebug}" "${phpDirExtract}\ext\php_xdebug.dll";
-
-                $search = "php_xdebug.dll";
-                $replace = "${phpDirExtract}ext\php_xdebug.dll";
-                (Get-Content -Path $phpIni) -replace $search, $replace | Set-Content $phpIni;
+            Write-Output("Install ${phpXdebug}");
+            if (-not(Test-Path -Path $tmpDownloadXdebug)) {
+                Invoke-WebRequest -Uri $url -OutFile $tmpDownloadXdebug;
             }
-            
-            $tmpPath = $phpPath;
-            $phpPath = $phpDirExtract + ";" + $tmpPath;
+            Copy-Item "${tmpDownloadXdebug}" "${phpDirExtract}\ext\php_xdebug.dll";
+
+            $search = "php_xdebug.dll";
+            $replace = "${phpDirExtract}ext\php_xdebug.dll";
+                (Get-Content -Path $phpIni) -replace $search, $replace | Set-Content $phpIni;
         }
+
+        if ($installComposer -eq 1) {
+            $composerTmpInstalled = [int]$phpVersionDir -ge $composerMinimumVersion ? $tmpComposer : $tmpComposerLts;
+            Copy-Item $composerTmpInstalled "${phpDirExtract}\composer.phar";
+            
+            $composerInstallVer = "${phpDirExtract}\composer${phpVersionDir}.bat";
+            Copy-Item .\source\composer.bat $composerInstallVer;
+
+            $composerInstall = "${phpDirExtract}\composer.bat";
+            Copy-Item .\source\composer.bat $composerInstall;
+        }
+
+        $tmpPath = $phpPath;
+        $phpPath = $phpDirExtract + ";" + $tmpPath;
     }
 }
 

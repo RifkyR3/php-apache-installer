@@ -4,5 +4,7 @@
     "APACHE_FCGI": "https://www.apachelounge.com/download/VS17/modules/mod_fcgid-2.3.10-win64-VS17.zip",
     "PHP": "https://windows.php.net/downloads/releases/archives/",
     "PHP_RELEASE": "https://windows.php.net/downloads/releases/",
-    "XDEBUG": "https://xdebug.org/files/"
+    "XDEBUG": "https://xdebug.org/files/",
+    "COMPOSER": "https://getcomposer.org/download/latest-stable/composer.phar",
+    "COMPOSER_LTS": "https://getcomposer.org/download/latest-2.2.x/composer.phar"
 }
