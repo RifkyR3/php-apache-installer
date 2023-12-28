@@ -5,3 +5,4 @@
 !source/
 !source/*
 !source/*/*
+!.env.sample

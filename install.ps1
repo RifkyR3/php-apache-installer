@@ -1,40 +1,44 @@
-[bool]$installVCRedist = 1;
+if (-not(Test-Path -Path .env)) {
+    Copy-Item .env.sample .env
+}
 
-[bool]$installPhp = 1;
-[bool]$downloadPhp = 1;
-[bool]$installXdebug = 1;
-[bool]$phpPathGenerate = 0;
+Get-Content .env | ForEach-Object {
+    $name, $value = $_.split('=')
+    if ([string]::IsNullOrWhiteSpace($name) || $name.Contains('#')) {
+        # do nothing
+    }
+    else {
+        Set-Content env:\$name $value
+    }
+}
 
-[bool]$installComposer = 1;
+[bool]$installVCRedist = [string]::IsNullOrWhiteSpace($env:INSTALL_VCREDIST) ? 1 : [int]$env:INSTALL_VCREDIST;
 
-$whatToInstall = @(
-    "v5.4",
-    "v5.5",
-    "v5.6",
-    "v7.0",
-    "v7.1",
-    "v7.2",
-    "v7.3",
-    "v7.4",
-    "v8.0",
-    "v8.1",
-    "v8.2",
-    "v8.3"
-);
+[bool]$installPhp = [string]::IsNullOrWhiteSpace($env:INSTALL_PHP) ? 1 : [int]$env:INSTALL_PHP;
+[bool]$downloadPhp = [string]::IsNullOrWhiteSpace($env:DOWNLOAD_PHP) ? 1 : [int]$env:DOWNLOAD_PHP;
+[bool]$installXdebug = [string]::IsNullOrWhiteSpace($env:INSTALL_XDEBUG) ? 1 : [int]$env:INSTALL_XDEBUG;
+[bool]$phpPathGenerate = [string]::IsNullOrWhiteSpace($env:GENERATE_PATH_PHP) ? 1 : [int]$env:GENERATE_PATH_PHP;
+
+[bool]$installComposer = [string]::IsNullOrWhiteSpace($env:INSTALL_COMPOSER) ? 1 : [int]$env:INSTALL_COMPOSER;
+
+$whatToInstall = [string]::IsNullOrWhiteSpace($env:INSTALL_PHP_VERSION) ? "v5.4, v5.5, v5.6, v7.0, v7.1, v7.2, v7.3, v7.4, v8.0, v8.1, v8.2, v8.3" : [string]$env:INSTALL_PHP_VERSION;
+$whatToInstall = $whatToInstall.Replace('"', '').Replace("'", "").Split(",");
 
 # TS >> Apache with mod_php
 # NTS >> IIS and other FastCGI or Apache with mod_fastcgi
 # $typeToInstall = "TS";
 $typeToInstall = "NTS";
 
-[bool]$installApache = 1;
-[bool]$downloadApache = 1;
+[bool]$installApache = [string]::IsNullOrWhiteSpace($env:INSTALL_APACHE) ? 1 : [int]$env:INSTALL_APACHE;
+[bool]$downloadApache = [string]::IsNullOrWhiteSpace($env:DOWNLOAD_APACHE) ? 1 : [int]$env:DOWNLOAD_APACHE;
 
 # install default to current dir
-$installDir = ${PWD};
-# $installDir = 'D:\Program\web';
+$installDir = [string]::IsNullOrWhiteSpace($env:INSTALL_DIR) ? ${PWD} : [string]$env:INSTALL_DIR;
+$installDir = $installDir.Replace("/", "\").Split("\");
+$installDir[0] = $installDir[0] -eq "." ? ${PWD} : $installDir[0];
+$installDir = $installDir -join "\";
 
-[bool]$cleanTmpDir = 0;
+[bool]$cleanTmpDir = [string]::IsNullOrWhiteSpace($env:CLEAN_TMP_DIR) ? 1 : [int]$env:CLEAN_TMP_DIR;
 
 # Variable
 $apacheDir = "${installDir}\apache\";
@@ -42,8 +46,10 @@ $nginxDir = "${installDir}\nginx\";
 $phpDir = "${installDir}\PHP\";
 $phpBaseConfig = "php.ini-development";
 
-$htdocs = "${installDir}\apache\htdocs";
-# $htdocs = "${installDir}\www";
+$htdocs = [string]::IsNullOrWhiteSpace($env:HTDOCS_DIR) ? "${installDir}\apache\htdocs" : [string]$env:HTDOCS_DIR;
+$htdocs = $htdocs.Replace("/", "\").Split("\");
+$htdocs[0] = $htdocs[0] -eq "." ? ${PWD} : $htdocs[0];
+$htdocs = $htdocs -join "\";
 
 ###################################END MANUAL CONFIG################################################
 $phpPath = '';
@@ -89,8 +95,8 @@ if ($installComposer -eq 1) {
 
 # Install php
 if ($installPhp -eq 1) {
-    for ($i = 0; $i -lt $whatToInstall.Count; $i++) {
-        $version = $whatToInstall[$i];
+    foreach ($version in $whatToInstall) {
+        $version = $version.Trim();
 
         $type = $typeToInstall;
         $phpInstallDir = $phpDir;
@@ -276,8 +282,8 @@ if ($installApache -eq 1) {
     $search = "Listen 80";
     $replace = "Listen 80";
     $modifyFile = $httpdConf;
-    for ($i = 0; $i -lt $whatToInstall.Count; $i++) {
-        $version = $whatToInstall[$i];
+    foreach ($version in $whatToInstall) {
+        $version = $version.Trim();
         $phpData = $phpSourceVersions.NTS.$version;
         $alias = $phpData.alias
         $replace = "${replace}`nListen 80${alias}";
