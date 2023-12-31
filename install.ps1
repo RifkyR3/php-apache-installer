@@ -143,12 +143,16 @@ if ($installPhp -eq 1) {
         Copy-Item "${phpDirExtract}\${phpBaseConfig}" $phpIni;
         Copy-Item "${phpDirExtract}\php.exe" "${phpDirExtract}\php${phpVersionDir}.exe"
 
-        # Config Replace 
+        # Config Extension
         $typeConfig = $phpData.config;
-        $findReplace = $phpSourceConfigExtension.$typeConfig;
-        foreach ($value in $findReplace) {
-            $search = $value[0];
-            $replace = $value[1];
+        $copyConfig = $phpSourceConfigExtension.$typeConfig;
+        foreach ($value in $copyConfig) {
+            $search = ";${value}";
+            $replace = $value;
+                (Get-Content -Path $phpIni) -replace $search, $replace | Set-Content $phpIni;
+
+            $search = "; ${value}";
+            $replace = $value;
                 (Get-Content -Path $phpIni) -replace $search, $replace | Set-Content $phpIni;
         }
 
