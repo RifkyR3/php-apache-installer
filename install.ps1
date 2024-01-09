@@ -276,7 +276,7 @@ if ($installApache -eq 1) {
     # Config APACHE
     $httpdConf = "${apacheDir}conf/httpd.conf";
     Move-Item $httpdConf "${httpdConf}.tmp";
-    Copy-Item .\source\httpd.conf $httpdConf
+    Copy-Item .\source\apache\httpd.conf $httpdConf
 
     $apacheDirRevert = $apacheDir -replace "\\", '/';
     $search = "{{ROOT}}";
@@ -296,7 +296,7 @@ if ($installApache -eq 1) {
 
     $httpdVhostConf = "${apacheDir}conf/extra/httpd-vhosts.conf";
     Move-Item $httpdVhostConf "${apacheDir}conf/extra/httpd-vhosts.conf.tmp";
-    Copy-Item .\source\httpd-vhosts.conf $httpdVhostConf;
+    Copy-Item .\source\apache\httpd-vhosts.conf $httpdVhostConf;
 
     $search = "{{HTDOCS}}";
     $replace = $htdocs -replace "\\", '/';
@@ -309,10 +309,10 @@ if ($installApache -eq 1) {
     (Get-Content -Path $modifyFile) -replace $search, $replace | Set-Content $modifyFile;
 
     mkdir "${apacheDir}conf/extra/host/";
-    Copy-Item -Path .\source\host\* -Destination "${apacheDir}conf/extra/host/" -Recurse;
+    Copy-Item -Path .\source\apache\host\* -Destination "${apacheDir}conf/extra/host/" -Recurse;
 
-    Copy-Item -Path .\source\registerApache.ps1 "${apacheDir}\bin\registerApache.ps1";
-    Copy-Item -Path .\source\unistallAPache.ps1 "${apacheDir}\bin\unistallAPache.ps1";
+    Copy-Item -Path .\source\apache\registerApache.ps1 "${apacheDir}\bin\registerApache.ps1";
+    Copy-Item -Path .\source\apache\unistallAPache.ps1 "${apacheDir}\bin\unistallAPache.ps1";
 }
 
 if ($cleanTmpDir -eq 1) {
