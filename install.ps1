@@ -17,7 +17,7 @@ Get-Content .env | ForEach-Object {
 [bool]$installPhp = [string]::IsNullOrWhiteSpace($env:INSTALL_PHP) ? 1 : [int]$env:INSTALL_PHP;
 [bool]$downloadPhp = [string]::IsNullOrWhiteSpace($env:DOWNLOAD_PHP) ? 1 : [int]$env:DOWNLOAD_PHP;
 [bool]$installXdebug = [string]::IsNullOrWhiteSpace($env:INSTALL_XDEBUG) ? 1 : [int]$env:INSTALL_XDEBUG;
-[bool]$phpPathGenerate = [string]::IsNullOrWhiteSpace($env:GENERATE_PATH_PHP) ? 1 : [int]$env:GENERATE_PATH_PHP;
+[bool]$phpPathRegister = [string]::IsNullOrWhiteSpace($env:REGISTER_PATH_PHP) ? 1 : [int]$env:REGISTER_PATH_PHP;
 
 [bool]$installComposer = [string]::IsNullOrWhiteSpace($env:INSTALL_COMPOSER) ? 1 : [int]$env:INSTALL_COMPOSER;
 
@@ -319,8 +319,14 @@ if ($cleanTmpDir -eq 1) {
     Remove-Item -Recurse $tmpDir; 
 }
 
-if ($phpPathGenerate) {
-    Write-Output("######################################################################################################");
-    Write-Output("Generated PHP Path");
-    Write-Output($phpPath);
+if ($phpPathRegister) {
+    $tmpPath = (get-item hkcu:\Environment).GetValue('Path', $null, 'DoNotExpandEnvironmentNames');
+    if (Select-String -InputObject $tmpPath -Pattern "%PHP%") {
+        # Write-Host 'exists';
+    }
+    else {
+        [Environment]::SetEnvironmentVariable('Path', "${tmpPath}%PHP%;", 'user')
+    }
+
+    [Environment]::SetEnvironmentVariable('PHP', $phpPath, 'user');
 }
