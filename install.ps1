@@ -283,8 +283,8 @@ if ($installApache -eq 1) {
     $replace = $apacheDirRevert;
     (Get-Content -Path $httpdConf) -replace $search, $replace | Set-Content $httpdConf;
 
-    $search = "Listen 80";
-    $replace = "Listen 80";
+    $search = "{{LISTEN_PORT}}";
+    $replace = "";
     $modifyFile = $httpdConf;
     foreach ($version in $whatToInstall) {
         $version = $version.Trim();
