@@ -4,25 +4,28 @@
         "zend_extension = php_xdebug.dll",
         "xdebug.remote_host = 127.0.0.1",
         "xdebug.remote_port = 9005",
-        "xdebug.default_enable=1",
-        "xdebug.remote_autostart=1",
+        "; xdebug.default_enable=1",
+        "; xdebug.remote_autostart=1",
         "xdebug.remote_enable=1",
-        "xdebug.var_display_max_children = -1",
-        "xdebug.var_display_max_data = -1",
-        "xdebug.var_display_max_depth = -1",
-        "xdebug.max_nesting_level = 400"
+        "xdebug.remote_handler = dbgp",
+        "xdebug.remote_mode = req",
+        "; xdebug.var_display_max_children = -1",
+        "; xdebug.var_display_max_data = -1",
+        "; xdebug.var_display_max_depth = -1",
+        "; xdebug.max_nesting_level = 512"
     ],
     "new": [
         "[xdebug]",
         "zend_extension = php_xdebug.dll",
         "xdebug.client_host = 127.0.0.1",
         "xdebug.client_port = 9005",
-        "xdebug.start_with_request=yes",
+        "; xdebug.start_with_request=yes",
+        "xdebug.start_with_request=trigger",
         "xdebug.mode = develop, debug",
-        "xdebug.discover_client_host=1",
-        "xdebug.var_display_max_children = -1",
-        "xdebug.var_display_max_data = -1",
-        "xdebug.var_display_max_depth = -1",
-        "xdebug.max_nesting_level = 400"
+        "; xdebug.discover_client_host=1",
+        "; xdebug.var_display_max_children = -1",
+        "; xdebug.var_display_max_data = -1",
+        "; xdebug.var_display_max_depth = -1",
+        "; xdebug.max_nesting_level = 512"
     ]
 }
