@@ -101,10 +101,13 @@ if ($installPhp -eq 1) {
         $type = $typeToInstall;
         $phpInstallDir = $phpDir;
 
-        $phpData = $phpSourceVersions.$type.$version;
+        $phpData = $phpSourceVersions.$version;
         
         # Download PHP
         $phpBaseFile = $phpData.name;
+        if ($type -ne "NTS") {
+            $phpBaseFile = $phpBaseFile.replace("-nts", "");
+        }
         if ($phpData.download -eq "release") {
             $url = "${baseUrlPhpRelease}${phpBaseFile}";
         }
@@ -180,6 +183,9 @@ if ($installPhp -eq 1) {
 
             # Install Xdebug
             $phpXdebug = $phpData.xdebug;
+            if ($type -ne "NTS") {
+                $phpXdebug = $phpXdebug.replace("-nts", "");
+            }
             $url = "${baseUrlXdebug}${phpXdebug}";
             $tmpDownloadXdebug = "${tmpDir}${phpXdebug}";
 
