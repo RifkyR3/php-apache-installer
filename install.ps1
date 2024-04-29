@@ -92,8 +92,14 @@ $tmpComposer = "${tmpDir}${composer}";
 $tmpComposerLts = "${tmpDir}${composerLts}";
 
 if ($installComposer -eq 1) {
-    Invoke-WebRequest -Uri $baseUrlComposer -OutFile $tmpComposer;
-    Invoke-WebRequest -Uri $baseUrlComposerLts -OutFile $tmpComposerLts;
+    if (-not(Test-Path -Path $tmpComposer)) {
+        Write-Output("Not Found. Download ${composer} to ${tmpDir}");
+        Invoke-WebRequest -Uri $baseUrlComposer -OutFile $tmpComposer;
+    }
+    if (-not(Test-Path -Path $tmpComposerLts)) {
+        Write-Output("Not Found. Download ${composerLts} to ${tmpDir}");
+        Invoke-WebRequest -Uri $baseUrlComposerLts -OutFile $tmpComposerLts;
+    }
 }
 
 # Install php

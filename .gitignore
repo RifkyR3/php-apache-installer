@@ -2,6 +2,7 @@
 !.gitignore
 !README.md
 !install.ps1
+!composerUpdate.ps1
 !source/
 !source/*
 !source/*/*
