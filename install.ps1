@@ -303,7 +303,7 @@ if ($installApache -eq 1) {
     $modifyFile = $httpdConf;
     foreach ($version in $whatToInstall) {
         $version = $version.Trim();
-        $phpData = $phpSourceVersions.NTS.$version;
+        $phpData = $phpSourceVersions.$version;
         $alias = $phpData.alias
         $replace = "${replace}`nListen 80${alias}";
     }
