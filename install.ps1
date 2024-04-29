@@ -21,7 +21,8 @@ Get-Content .env | ForEach-Object {
 
 [bool]$installComposer = [string]::IsNullOrWhiteSpace($env:INSTALL_COMPOSER) ? 1 : [int]$env:INSTALL_COMPOSER;
 
-$whatToInstall = [string]::IsNullOrWhiteSpace($env:INSTALL_PHP_VERSION) ? "v5.4, v5.5, v5.6, v7.0, v7.1, v7.2, v7.3, v7.4, v8.0, v8.1, v8.2, v8.3" : [string]$env:INSTALL_PHP_VERSION;
+$basePhpVersion = "v5.4, v5.5, v5.6, v7.0, v7.1, v7.2, v7.3, v7.4, v8.0, v8.1, v8.2, v8.3";
+$whatToInstall = [string]::IsNullOrWhiteSpace($env:INSTALL_PHP_VERSION) ? $basePhpVersion : [string]$env:INSTALL_PHP_VERSION;
 $whatToInstall = $whatToInstall.Replace('"', '').Replace("'", "").Split(",");
 
 # TS >> Apache with mod_php
@@ -31,6 +32,7 @@ $typeToInstall = "NTS";
 
 [bool]$installApache = [string]::IsNullOrWhiteSpace($env:INSTALL_APACHE) ? 1 : [int]$env:INSTALL_APACHE;
 [bool]$downloadApache = [string]::IsNullOrWhiteSpace($env:DOWNLOAD_APACHE) ? 1 : [int]$env:DOWNLOAD_APACHE;
+[bool]$apachePathRegister = [string]::IsNullOrWhiteSpace($env:REGISTER_PATH_APACHE) ? 1 : [int]$env:REGISTER_PATH_APACHE;
 
 # install default to current dir
 $installDir = [string]::IsNullOrWhiteSpace($env:INSTALL_DIR) ? ${PWD} : [string]$env:INSTALL_DIR;
@@ -52,7 +54,8 @@ $htdocs[0] = $htdocs[0] -eq "." ? ${PWD} : $htdocs[0];
 $htdocs = $htdocs -join "\";
 
 ###################################END MANUAL CONFIG################################################
-$phpPath = '';
+$pathName = "WEBSERV";
+$registerPath = '';
 
 $tmpDir = "${PWD}\tmp\";
 if (-not(Test-Path -Path $tmpDir)) {
@@ -211,8 +214,8 @@ if ($installPhp -eq 1) {
             Copy-Item .\source\composer.bat $composerInstall;
         }
 
-        $tmpPath = $phpPath;
-        $phpPath = $phpDirExtract + ";" + $tmpPath;
+        $tmpPath = $registerPath;
+        $registerPath = $phpDirExtract + ";" + $tmpPath;
     }
 }
 
@@ -319,20 +322,25 @@ if ($installApache -eq 1) {
 
     Copy-Item -Path .\source\apache\registerApache.ps1 "${apacheDir}\bin\registerApache.ps1";
     Copy-Item -Path .\source\apache\unistallAPache.ps1 "${apacheDir}\bin\unistallAPache.ps1";
+
+    if ($apachePathRegister) {
+        $tmpPath = $registerPath;
+        $registerPath = $apacheDir + "bin;" + $tmpPath;
+    }
 }
 
 if ($cleanTmpDir -eq 1) {
     Remove-Item -Recurse $tmpDir; 
 }
 
-if ($phpPathRegister) {
+if ($phpPathRegister -or $apachePathRegister) {
     $tmpPath = (get-item hkcu:\Environment).GetValue('Path', $null, 'DoNotExpandEnvironmentNames');
-    if (Select-String -InputObject $tmpPath -Pattern "%PHP%") {
+    if (Select-String -InputObject $tmpPath -Pattern "%${pathName}%") {
         # Write-Host 'exists';
     }
     else {
-        [Environment]::SetEnvironmentVariable('Path', "${tmpPath}%PHP%;", 'user')
+        [Environment]::SetEnvironmentVariable('Path', "${tmpPath}%${pathName}%;", 'user')
     }
 
-    [Environment]::SetEnvironmentVariable('PHP', $phpPath, 'user');
+    [Environment]::SetEnvironmentVariable($pathName, $registerPath, 'user');
 }
