@@ -1,6 +1,8 @@
 *
 !.gitignore
 !README.md
+!01Include.ps1
+!02Function.ps1
 !install.ps1
 !composerUpdate.ps1
 !source/

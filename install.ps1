@@ -1,16 +1,5 @@
-if (-not(Test-Path -Path .env)) {
-    Copy-Item .env.sample .env
-}
-
-Get-Content .env | ForEach-Object {
-    $name, $value = $_.split('=')
-    if ([string]::IsNullOrWhiteSpace($name) || $name.Contains('#')) {
-        # do nothing
-    }
-    else {
-        Set-Content env:\$name $value
-    }
-}
+. .\01Include.ps1
+. .\02Function.ps1
 
 [bool]$installVCRedist = [string]::IsNullOrWhiteSpace($env:INSTALL_VCREDIST) ? 1 : [int]$env:INSTALL_VCREDIST;
 
@@ -35,10 +24,7 @@ $typeToInstall = "NTS";
 [bool]$apachePathRegister = [string]::IsNullOrWhiteSpace($env:REGISTER_PATH_APACHE) ? 1 : [int]$env:REGISTER_PATH_APACHE;
 
 # install default to current dir
-$installDir = [string]::IsNullOrWhiteSpace($env:INSTALL_DIR) ? ${PWD} : [string]$env:INSTALL_DIR;
-$installDir = $installDir.Replace("/", "\").Split("\");
-$installDir[0] = $installDir[0] -eq "." ? ${PWD} : $installDir[0];
-$installDir = $installDir -join "\";
+$installDir = Path-Cleaning ${PWD} $env:INSTALL_DIR;
 
 [bool]$cleanTmpDir = [string]::IsNullOrWhiteSpace($env:CLEAN_TMP_DIR) ? 1 : [int]$env:CLEAN_TMP_DIR;
 
@@ -48,10 +34,7 @@ $nginxDir = "${installDir}\nginx\";
 $phpDir = "${installDir}\PHP\";
 $phpBaseConfig = "php.ini-development";
 
-$htdocs = [string]::IsNullOrWhiteSpace($env:HTDOCS_DIR) ? "${installDir}\apache\htdocs" : [string]$env:HTDOCS_DIR;
-$htdocs = $htdocs.Replace("/", "\").Split("\");
-$htdocs[0] = $htdocs[0] -eq "." ? ${PWD} : $htdocs[0];
-$htdocs = $htdocs -join "\";
+$htdocs = Path-Cleaning "${apacheDir}htdocs" $env:HTDOCS_DIR;
 
 ###################################END MANUAL CONFIG################################################
 $pathName = "WEBSERV";
@@ -92,14 +75,9 @@ $tmpComposer = "${tmpDir}${composer}";
 $tmpComposerLts = "${tmpDir}${composerLts}";
 
 if ($installComposer -eq 1) {
-    if (-not(Test-Path -Path $tmpComposer)) {
-        Write-Output("Not Found. Download ${composer} to ${tmpDir}");
-        Invoke-WebRequest -Uri $baseUrlComposer -OutFile $tmpComposer;
-    }
-    if (-not(Test-Path -Path $tmpComposerLts)) {
-        Write-Output("Not Found. Download ${composerLts} to ${tmpDir}");
-        Invoke-WebRequest -Uri $baseUrlComposerLts -OutFile $tmpComposerLts;
-    }
+    Check-Download $baseUrlComposer $tmpDir $composer;
+
+    Check-Download $baseUrlComposerLts $tmpDir $composerLts;
 }
 
 # Install php
@@ -127,11 +105,10 @@ if ($installPhp -eq 1) {
 
         if ($downloadPhp -eq 1) {
             Write-Output("Download ${phpBaseFile} to ${tmpDir}");
-            Invoke-WebRequest -Uri $url -OutFile $tmpDownload;
+            Download-File $url $tmpDownload
         }
-        elseif (-not(Test-Path -Path $tmpDownload)) {
-            Write-Output("Not Found. Download ${phpBaseFile} to ${tmpDir}");
-            Invoke-WebRequest -Uri $url -OutFile $tmpDownload;
+        else{
+            Check-Download $url $tmpDir $phpBaseFile;
         }
 
         # Extract PHP
@@ -199,9 +176,7 @@ if ($installPhp -eq 1) {
             $tmpDownloadXdebug = "${tmpDir}${phpXdebug}";
 
             Write-Output("Install ${phpXdebug}");
-            if (-not(Test-Path -Path $tmpDownloadXdebug)) {
-                Invoke-WebRequest -Uri $url -OutFile $tmpDownloadXdebug;
-            }
+            Check-Download $url $tmpDir $phpXdebug;
             Copy-Item "${tmpDownloadXdebug}" "${phpDirExtract}\ext\php_xdebug.dll";
 
             $search = "php_xdebug.dll";
@@ -240,27 +215,15 @@ if ($installApache -eq 1) {
 
     if ($downloadApache -eq 1) {
         Write-Output("Download APACHE");
-        # Invoke-WebRequest -Uri $urlApache -OutFile "${tmpDownload}/APACHE.zip";
-        # Invoke-WebRequest -Uri $urlApache -OutFile "${tmpDownload}/APACHE_FCGI.zip";
 
-        $WebClient = New-Object System.Net.WebClient;
-        $WebClient.DownloadFile($urlApache, $tmpDownloadApache);
+        Download-File $urlApache $tmpDownloadApache;
 
-        $WebClient = New-Object System.Net.WebClient;
-        $WebClient.DownloadFile($urlApacheFcgi, $tmpDownloadApacheFcgi);
+        Download-File $urlApacheFcgi $tmpDownloadApacheFcgi
     }
     else {
-        if (-not(Test-Path -Path $tmpDownloadApache)) {
-            Write-Output("Not Found. Download APACHE to ${tmpDownloadApache}");
-            $WebClient = New-Object System.Net.WebClient;
-            $WebClient.DownloadFile($urlApache, $tmpDownloadApache);
-        }
+        Check-Download $urlApache $tmpDownload "APACHE.zip";
         
-        if (-not(Test-Path -Path $tmpDownloadApacheFcgi)) {
-            Write-Output("Not Found. Download APACHE FCGI to ${tmpDownloadApacheFcgi}");
-            $WebClient = New-Object System.Net.WebClient;
-            $WebClient.DownloadFile($urlApacheFcgi, $tmpDownloadApacheFcgi);
-        }
+        Check-Download $urlApacheFcgi $tmpDownload "APACHE_FCGI.zip";
     }
 
     $dirTmpApache = "${tmpDownload}/APACHE";
@@ -340,13 +303,5 @@ if ($cleanTmpDir -eq 1) {
 }
 
 if ($phpPathRegister -or $apachePathRegister) {
-    $tmpPath = (get-item hkcu:\Environment).GetValue('Path', $null, 'DoNotExpandEnvironmentNames');
-    if (Select-String -InputObject $tmpPath -Pattern "%${pathName}%") {
-        # Write-Host 'exists';
-    }
-    else {
-        [Environment]::SetEnvironmentVariable('Path', "${tmpPath}%${pathName}%;", 'user')
-    }
-
-    [Environment]::SetEnvironmentVariable($pathName, $registerPath, 'user');
+    Register-Path-Web $pathName $registerPath;
 }

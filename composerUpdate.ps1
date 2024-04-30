@@ -1,3 +1,6 @@
+. .\01Include.ps1
+. .\02Function.ps1
+
 $tmpDir = "${PWD}\tmp\";
 if (-not(Test-Path -Path $tmpDir)) {
     Write-Output("Create TMP");
@@ -5,10 +8,7 @@ if (-not(Test-Path -Path $tmpDir)) {
 }
 
 # install default to current dir
-$installDir = [string]::IsNullOrWhiteSpace($env:INSTALL_DIR) ? ${PWD} : [string]$env:INSTALL_DIR;
-$installDir = $installDir.Replace("/", "\").Split("\");
-$installDir[0] = $installDir[0] -eq "." ? ${PWD} : $installDir[0];
-$installDir = $installDir -join "\";
+$installDir = Path-Cleaning ${PWD} $env:INSTALL_DIR;
 
 $phpDir = "${installDir}\PHP\";
 
@@ -28,8 +28,8 @@ $composerMinimumVersion = 72;
 $tmpComposer = "${tmpDir}${composer}";
 $tmpComposerLts = "${tmpDir}${composerLts}";
 
-Invoke-WebRequest -Uri $baseUrlComposer -OutFile $tmpComposer;
-Invoke-WebRequest -Uri $baseUrlComposerLts -OutFile $tmpComposerLts;
+Download-File $baseUrlComposer $tmpComposer;
+Download-File $baseUrlComposerLts $tmpComposerLts;
 
 foreach ($version in $whatToInstall) {
     $phpData = $phpSourceVersions.$version;
