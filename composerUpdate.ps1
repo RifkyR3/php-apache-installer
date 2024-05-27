@@ -22,7 +22,7 @@ $baseUrlComposer = $baseUrl.COMPOSER;
 $baseUrlComposerLts = $baseUrl.COMPOSER_LTS;
 
 $composer = "composer.phar";
-$composerLts = "composer-lts.phar";
+$composerLts = "composer-lts.phar"; 
 $composerMinimumVersion = 72;
 
 $tmpComposer = "${tmpDir}${composer}";
