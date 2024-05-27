@@ -300,7 +300,7 @@ if ($installApache -eq 1) {
 
 if ($cleanTmpDir -eq 1) {
     Remove-Item -Recurse $tmpDir; 
-}
+} 
 
 if ($phpPathRegister -or $apachePathRegister) {
     Register-Path-Web $pathName $registerPath;
