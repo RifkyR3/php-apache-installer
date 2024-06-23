@@ -37,11 +37,25 @@ function Path-Cleaning($default, $path) {
 
 function Register-Path-Web ($pathName, $registerPath) {
     $tmpPath = (get-item hkcu:\Environment).GetValue('Path', $null, 'DoNotExpandEnvironmentNames');
-    if (Select-String -InputObject $tmpPath -Pattern "%${pathName}%") {
-        # Write-Host 'exists';
+    $tmpPath = $tmpPath.Split(";");
+
+    $tmpRegisterPath = '';
+    $registered = 0;
+    for ($i = 0; $i -lt $tmpPath.Count; $i++) {
+        if ($i -eq 0) {
+            $tmpRegisterPath = $tmpPath[$i];
+        }
+        else {
+            $tmpRegisterPath = $tmpRegisterPath + ";" + $tmpPath[$i];
+        }
+
+        if ($tmpPath[$i] -eq "%${pathName}%") {
+            $registered = 1;
+        }
     }
-    else {
-        [Environment]::SetEnvironmentVariable('Path', "${tmpPath};%${pathName}%;", 'user')
+
+    if ($registered -eq 0) {
+        [Environment]::SetEnvironmentVariable('Path', "${tmpRegisterPath};%${pathName}%;", 'user')
     }
 
     [Environment]::SetEnvironmentVariable($pathName, $registerPath, 'user');
