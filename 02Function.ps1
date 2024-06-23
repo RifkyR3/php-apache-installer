@@ -41,7 +41,7 @@ function Register-Path-Web ($pathName, $registerPath) {
         # Write-Host 'exists';
     }
     else {
-        [Environment]::SetEnvironmentVariable('Path', "${tmpPath}%${pathName}%;", 'user')
+        [Environment]::SetEnvironmentVariable('Path', "${tmpPath};%${pathName}%;", 'user')
     }
 
     [Environment]::SetEnvironmentVariable($pathName, $registerPath, 'user');
