@@ -22,7 +22,7 @@ $typeToInstall = "NTS";
 [bool]$installApache = [string]::IsNullOrWhiteSpace($env:INSTALL_APACHE) ? 1 : [int]$env:INSTALL_APACHE;
 [bool]$downloadApache = [string]::IsNullOrWhiteSpace($env:DOWNLOAD_APACHE) ? 1 : [int]$env:DOWNLOAD_APACHE;
 [bool]$apachePathRegister = [string]::IsNullOrWhiteSpace($env:REGISTER_PATH_APACHE) ? 1 : [int]$env:REGISTER_PATH_APACHE;
-
+$baseApacheName = [string]::IsNullOrWhiteSpace($env:APACHE_BASE) ? "httpd-2.4.59-240605-win64-VS17.zip" : [string]$env:APACHE_BASE;
 # install default to current dir
 $installDir = Path-Cleaning ${PWD} $env:INSTALL_DIR;
 
@@ -207,6 +207,7 @@ if ($installApache -eq 1) {
     }
 
     $urlApache = $baseUrl.APACHE;
+    $urlApache = "${urlApache}/${baseApacheName}";
     $urlApacheFcgi = $baseUrl.APACHE_FCGI;
 
     $tmpDownload = "${tmpDir}";

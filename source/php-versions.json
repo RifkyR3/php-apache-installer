@@ -55,21 +55,21 @@
         "download": "release"
     },
     "v8.1": {
-        "name": "php-8.1.28-nts-Win32-vs16-x64.zip",
+        "name": "php-8.1.29-nts-Win32-vs16-x64.zip",
         "xdebug": "php_xdebug-3.3.2-8.1-vs16-nts-x86_64.dll",
         "alias": "81",
         "config": "new",
         "download": "release"
     },
     "v8.2": {
-        "name": "php-8.2.18-nts-Win32-vs16-x64.zip",
+        "name": "php-8.2.20-nts-Win32-vs16-x64.zip",
         "xdebug": "php_xdebug-3.3.2-8.2-vs16-nts-x86_64.dll",
         "alias": "82",
         "config": "new",
         "download": "release"
     },
     "v8.3": {
-        "name": "php-8.3.6-nts-Win32-vs16-x64.zip",
+        "name": "php-8.3.8-nts-Win32-vs16-x64.zip",
         "xdebug": "php_xdebug-3.3.2-8.3-vs16-nts-x86_64.dll",
         "alias": "83",
         "config": "new",
