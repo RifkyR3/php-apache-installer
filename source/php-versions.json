@@ -77,7 +77,7 @@
     "v8.4": {
         "name": "php-8.4.1-nts-Win32-vs17-x64.zip",
         "xdebug": "php_xdebug-3.4.0-8.4-vs17-nts-x86_64.dll",
-        "alias": "83",
+        "alias": "84",
         "config": "new",
         "download": "release"
     }
