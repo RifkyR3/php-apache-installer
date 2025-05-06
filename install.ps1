@@ -130,7 +130,8 @@ if ($installPhp -eq 1) {
         Write-Output("Create Config php.ini");
         $phpIni = "${phpDirExtract}\php.ini";
         Copy-Item "${phpDirExtract}\${phpBaseConfig}" $phpIni;
-        Copy-Item "${phpDirExtract}\php.exe" "${phpDirExtract}\php${phpVersionDir}.exe"
+        Copy-Item "${phpDirExtract}\php.exe" "${phpDirExtract}\php${phpVersionDir}.exe";
+        Copy-Item "${phpDirExtract}\php-cgi.exe" "${phpDirExtract}\php${phpVersionDir}-cgi.exe";
 
         # Config Extension
         $typeConfig = $phpData.config;

@@ -39,6 +39,7 @@
         "extension=sockets",
         "extension=sqlite3",
         "extension=xsl",
-        "extension=zip"
+        "extension=zip",
+        "extension=sodium"
     ]
 }
