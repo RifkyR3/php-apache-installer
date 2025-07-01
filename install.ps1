@@ -22,7 +22,12 @@ $typeToInstall = "NTS";
 [bool]$installApache = [string]::IsNullOrWhiteSpace($env:INSTALL_APACHE) ? 1 : [int]$env:INSTALL_APACHE;
 [bool]$downloadApache = [string]::IsNullOrWhiteSpace($env:DOWNLOAD_APACHE) ? 1 : [int]$env:DOWNLOAD_APACHE;
 [bool]$apachePathRegister = [string]::IsNullOrWhiteSpace($env:REGISTER_PATH_APACHE) ? 1 : [int]$env:REGISTER_PATH_APACHE;
-$baseApacheName = [string]::IsNullOrWhiteSpace($env:APACHE_BASE) ? "httpd-2.4.59-240605-win64-VS17.zip" : [string]$env:APACHE_BASE;
+$baseApacheName = [string]::IsNullOrWhiteSpace($env:APACHE_BASE) ? "httpd-2.4.63-250207-win64-VS17.zip" : [string]$env:APACHE_BASE;
+
+[bool]$installNginx = [string]::IsNullOrWhiteSpace($env:INSTALL_NGINX) ? 1 : [int]$env:INSTALL_NGINX;
+[bool]$downloadNginx = [string]::IsNullOrWhiteSpace($env:DOWNLOAD_NGINX) ? 1 : [int]$env:DOWNLOAD_NGINX;
+$baseNginxName = [string]::IsNullOrWhiteSpace($env:NGINX_BASE) ? "nginx-1.28.0.zip" : [string]$env:NGINX_BASE;
+
 # install default to current dir
 $installDir = Path-Cleaning ${PWD} $env:INSTALL_DIR;
 
@@ -298,6 +303,53 @@ if ($installApache -eq 1) {
         $tmpPath = $registerPath;
         $registerPath = $apacheDir + "bin;" + $tmpPath;
     }
+}
+
+if ($installNginx -eq 1) {
+    if ((Test-Path -Path $nginxDir)) {
+        Remove-Item -Recurse $nginxDir;
+    }
+
+    $urlNginx = $baseUrl.NGINX;
+    $urlNginx = "${urlNginx}/${baseNginxName}";
+
+    $tmpDownload = "${tmpDir}";
+    $tmpDownloadNginx = "${tmpDownload}/${baseNginxName}";
+
+    if ($downloadApache -eq 1) {
+        Write-Output("Download NGINX");
+
+        Download-File $urlApache $baseNginxName;
+    }
+    else {
+        Check-Download $urlNginx $tmpDownload $baseNginxName;
+    }
+
+    $dirTmpNginx = "${tmpDownload}/NGINX";
+    if (-not(Test-Path -Path $dirTmpNginx)) {
+        mkdir $dirTmpNginx;
+    }
+    else {
+        Remove-Item -Recurse $dirTmpNginx;
+        mkdir $dirTmpNginx;
+    }
+    Expand-Archive -Path $tmpDownloadNginx -DestinationPath $dirTmpNginx;
+
+    # Config
+    $conf = "${nginxDir}conf/nginx.conf";
+    Move-Item $conf "${conf}.tmp";
+    Copy-Item .\source\nginx\nginx.conf $conf;
+
+    $search = "{{HTDOCS}}";
+    $replace = $htdocs -replace "\\", '/';
+    $modifyFile = $conf;
+    (Get-Content -Path $modifyFile) -replace $search, $replace | Set-Content $modifyFile;
+    Copy-Item .\source\nginx\nginx.conf $conf;
+
+    $search = "{{ROOT}}";
+    $replace = $nginxDir -replace "\\", '/';
+    $modifyFile = $conf;
+    (Get-Content -Path $modifyFile) -replace $search, $replace | Set-Content $modifyFile;
 }
 
 if ($cleanTmpDir -eq 1) {
