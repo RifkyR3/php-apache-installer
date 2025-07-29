@@ -48,89 +48,86 @@ tasklist /FI "IMAGENAME eq php-cgi.exe" | find /i "php-cgi.exe" > nul
 if %ERRORLEVEL% equ 0 (
     echo [INFO] PHP processes are already running!
 ) else (
-    if exist "C:\webserver\PHP\84\" (
+    if exist "{{PHP_DIR}}\84\" (
         echo [STARTING] PHP 8.4 on port 9184...
-        start "PHP 8.4" /D "C:\webserver\PHP\84" "C:\webserver\PHP\84\php-cgi.exe" -b 127.0.0.1:9184 -c "C:\webserver\PHP\84\php.ini"
+        start "PHP 8.4" /D "{{PHP_DIR}}\84" "{{PHP_DIR}}\84\php-cgi.exe" -b 127.0.0.1:9184 -c "{{PHP_DIR}}\84\php.ini"
+        echo Nginx running on: Port 8084 with PHP 8.4
     )
 
-    if exist "C:\webserver\PHP\83\" (
+    if exist "{{PHP_DIR}}\83\" (
         echo [STARTING] PHP 8.3 on port 9183...
-        start "PHP 8.3" /D "C:\webserver\PHP\83" "C:\webserver\PHP\83\php-cgi.exe" -b 127.0.0.1:9183 -c "C:\webserver\PHP\83\php.ini"
+        start "PHP 8.3" /D "{{PHP_DIR}}\83" "{{PHP_DIR}}\83\php-cgi.exe" -b 127.0.0.1:9183 -c "{{PHP_DIR}}\83\php.ini"
+        echo Nginx running on: Port 8083 with PHP 8.3
     )
     
-    if exist "C:\webserver\PHP\82\" (
+    if exist "{{PHP_DIR}}\82\" (
         echo [STARTING] PHP 8.2 on port 9182...
-        start "PHP 8.2" /D "C:\webserver\PHP\82" "C:\webserver\PHP\82\php-cgi.exe" -b 127.0.0.1:9182 -c "C:\webserver\PHP\82\php.ini"
+        start "PHP 8.2" /D "{{PHP_DIR}}\82" "{{PHP_DIR}}\82\php-cgi.exe" -b 127.0.0.1:9182 -c "{{PHP_DIR}}\82\php.ini"
+        echo Nginx running on: Port 8082 with PHP 8.2
     )
     
-    if exist "C:\webserver\PHP\81\" (
+    if exist "{{PHP_DIR}}\81\" (
         echo [STARTING] PHP 8.1 on port 9181...
-        start "PHP 8.1" /D "C:\webserver\PHP\81" "C:\webserver\PHP\81\php-cgi.exe" -b 127.0.0.1:9181 -c "C:\webserver\PHP\81\php.ini"
+        start "PHP 8.1" /D "{{PHP_DIR}}\81" "{{PHP_DIR}}\81\php-cgi.exe" -b 127.0.0.1:9181 -c "{{PHP_DIR}}\81\php.ini"
+        echo Nginx running on: Port 8081 with PHP 8.1
     )
     
-    if exist "C:\webserver\PHP\80\" (
+    if exist "{{PHP_DIR}}\80\" (
         echo [STARTING] PHP 8.0 on port 9180...
-        start "PHP 8.0" /D "C:\webserver\PHP\80" "C:\webserver\PHP\80\php-cgi.exe" -b 127.0.0.1:9180 -c "C:\webserver\PHP\80\php.ini"
+        start "PHP 8.0" /D "{{PHP_DIR}}\80" "{{PHP_DIR}}\80\php-cgi.exe" -b 127.0.0.1:9180 -c "{{PHP_DIR}}\80\php.ini"
+        echo Nginx running on: Port 8080 with PHP 8.0
     )
     
-    if exist "C:\webserver\PHP\74\" (
+    if exist "{{PHP_DIR}}\74\" (
         echo [STARTING] PHP 7.4 on port 9174...
-        start "PHP 7.4" /D "C:\webserver\PHP\74" "C:\webserver\PHP\74\php-cgi.exe" -b 127.0.0.1:9174 -c "C:\webserver\PHP\74\php.ini"
+        start "PHP 7.4" /D "{{PHP_DIR}}\74" "{{PHP_DIR}}\74\php-cgi.exe" -b 127.0.0.1:9174 -c "{{PHP_DIR}}\74\php.ini"
+        echo Nginx running on: Port 8074 with PHP 7.4
     )
     
-    if exist "C:\webserver\PHP\73\" (
+    if exist "{{PHP_DIR}}\73\" (
         echo [STARTING] PHP 7.3 on port 9173...
-        start "PHP 7.3" /D "C:\webserver\PHP\73" "C:\webserver\PHP\73\php-cgi.exe" -b 127.0.0.1:9173 -c "C:\webserver\PHP\73\php.ini"
+        start "PHP 7.3" /D "{{PHP_DIR}}\73" "{{PHP_DIR}}\73\php-cgi.exe" -b 127.0.0.1:9173 -c "{{PHP_DIR}}\73\php.ini"
+        echo Nginx running on: Port 8073 with PHP 7.3
     )
     
-    if exist "C:\webserver\PHP\72\" (
+    if exist "{{PHP_DIR}}\72\" (
         echo [STARTING] PHP 7.2 on port 9172...
-        start "PHP 7.2" /D "C:\webserver\PHP\72" "C:\webserver\PHP\72\php-cgi.exe" -b 127.0.0.1:9172 -c "C:\webserver\PHP\72\php.ini"
+        start "PHP 7.2" /D "{{PHP_DIR}}\72" "{{PHP_DIR}}\72\php-cgi.exe" -b 127.0.0.1:9172 -c "{{PHP_DIR}}\72\php.ini"
+        echo Nginx running on: Port 8072 with PHP 7.2
     )
     
-    if exist "C:\webserver\PHP\71\" (
+    if exist "{{PHP_DIR}}\71\" (
         echo [STARTING] PHP 7.1 on port 9171...
-        start "PHP 7.1" /D "C:\webserver\PHP\71" "C:\webserver\PHP\71\php-cgi.exe" -b 117.0.0.1:9171 -c "C:\webserver\PHP\71\php.ini"
+        start "PHP 7.1" /D "{{PHP_DIR}}\71" "{{PHP_DIR}}\71\php-cgi.exe" -b 117.0.0.1:9171 -c "{{PHP_DIR}}\71\php.ini"
+        echo Nginx running on: Port 8071 with PHP 7.1
     )
     
-    if exist "C:\webserver\PHP\70\" (
+    if exist "{{PHP_DIR}}\70\" (
         echo [STARTING] PHP 7.0 on port 9170...
-        start "PHP 7.0" /D "C:\webserver\PHP\70" "C:\webserver\PHP\70\php-cgi.exe" -b 117.0.0.1:9170 -c "C:\webserver\PHP\70\php.ini"
+        start "PHP 7.0" /D "{{PHP_DIR}}\70" "{{PHP_DIR}}\70\php-cgi.exe" -b 117.0.0.1:9170 -c "{{PHP_DIR}}\70\php.ini"
+        echo Nginx running on: Port 8070 with PHP 7.0
     )
     
-    if exist "C:\webserver\PHP\56\" (
+    if exist "{{PHP_DIR}}\56\" (
         echo [STARTING] PHP 5.6 on port 9156...
-        start "PHP 5.6" /D "C:\webserver\PHP\56" "C:\webserver\PHP\56\php-cgi.exe" -b 117.0.0.1:9156 -c "C:\webserver\PHP\56\php.ini"
+        start "PHP 5.6" /D "{{PHP_DIR}}\56" "{{PHP_DIR}}\56\php-cgi.exe" -b 117.0.0.1:9156 -c "{{PHP_DIR}}\56\php.ini"
+        echo Nginx running on: Port 8056 with PHP 5.6
     )
     
-    if exist "C:\webserver\PHP\55\" (
+    if exist "{{PHP_DIR}}\55\" (
         echo [STARTING] PHP 5.5 on port 9155...
-        start "PHP 5.5" /D "C:\webserver\PHP\55" "C:\webserver\PHP\55\php-cgi.exe" -b 117.0.0.1:9155 -c "C:\webserver\PHP\55\php.ini"
+        start "PHP 5.5" /D "{{PHP_DIR}}\55" "{{PHP_DIR}}\55\php-cgi.exe" -b 117.0.0.1:9155 -c "{{PHP_DIR}}\55\php.ini"
+        echo Nginx running on: Port 8055 with PHP 5.5
     )
     
-    if exist "C:\webserver\PHP\54\" (
-        echo [STARTING] PHP 5.5 on port 9154...
-        start "PHP 5.5" /D "C:\webserver\PHP\54" "C:\webserver\PHP\54\php-cgi.exe" -b 117.0.0.1:9154 -c "C:\webserver\PHP\54\php.ini"
+    if exist "{{PHP_DIR}}\54\" (
+        echo [STARTING] PHP 5.4 on port 9154...
+        start "PHP 5.4" /D "{{PHP_DIR}}\54" "{{PHP_DIR}}\54\php-cgi.exe" -b 117.0.0.1:9154 -c "{{PHP_DIR}}\54\php.ini"
+        echo Nginx running on: Port 8054 with PHP 5.4
     )
     
 )
 
-echo.
-echo [SUCCESS] All servers started!
-echo Nginx running on:
-echo - Port 8084 with PHP 8.4
-echo - Port 8083 with PHP 8.3
-echo - Port 8082 with PHP 8.2
-echo - Port 8081 with PHP 8.1
-echo - Port 8080 with PHP 8.0
-echo - Port 8074 with PHP 7.4
-echo - Port 8073 with PHP 7.3
-echo - Port 8072 with PHP 7.2
-echo - Port 8071 with PHP 7.1
-echo - Port 8070 with PHP 7.0
-echo - Port 8056 with PHP 5.6
-echo - Port 8055 with PHP 5.5
-echo - Port 8054 with PHP 5.4
 pause
 goto menu
 

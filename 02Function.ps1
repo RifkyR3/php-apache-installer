@@ -60,3 +60,9 @@ function Register-Path-Web ($pathName, $registerPath) {
 
     [Environment]::SetEnvironmentVariable($pathName, $registerPath, 'user');
 }
+
+function Get-BoolFromEnv {
+    param([string]$envVar, [bool]$default = $true)
+    if ([string]::IsNullOrWhiteSpace($envVar)) { return $default }
+    return $envVar -in "1", "true", "yes", "on"
+}

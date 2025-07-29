@@ -1,388 +1,333 @@
+# Load dependencies
 . .\01Include.ps1
 . .\02Function.ps1
 
-[bool]$installVCRedist = [string]::IsNullOrWhiteSpace($env:INSTALL_VCREDIST) ? 1 : [int]$env:INSTALL_VCREDIST;
-
-[bool]$installPhp = [string]::IsNullOrWhiteSpace($env:INSTALL_PHP) ? 1 : [int]$env:INSTALL_PHP;
-[bool]$downloadPhp = [string]::IsNullOrWhiteSpace($env:DOWNLOAD_PHP) ? 1 : [int]$env:DOWNLOAD_PHP;
-[bool]$installXdebug = [string]::IsNullOrWhiteSpace($env:INSTALL_XDEBUG) ? 1 : [int]$env:INSTALL_XDEBUG;
-[bool]$phpPathRegister = [string]::IsNullOrWhiteSpace($env:REGISTER_PATH_PHP) ? 1 : [int]$env:REGISTER_PATH_PHP;
-
-[bool]$installComposer = [string]::IsNullOrWhiteSpace($env:INSTALL_COMPOSER) ? 1 : [int]$env:INSTALL_COMPOSER;
-
-$basePhpVersion = "v5.4, v5.5, v5.6, v7.0, v7.1, v7.2, v7.3, v7.4, v8.0, v8.1, v8.2, v8.3";
-$whatToInstall = [string]::IsNullOrWhiteSpace($env:INSTALL_PHP_VERSION) ? $basePhpVersion : [string]$env:INSTALL_PHP_VERSION;
-$whatToInstall = $whatToInstall.Replace('"', '').Replace("'", "").Split(",");
-
-# TS >> Apache with mod_php
-# NTS >> IIS and other FastCGI or Apache with mod_fastcgi
-# $typeToInstall = "TS";
-$typeToInstall = "NTS";
-
-[bool]$installApache = [string]::IsNullOrWhiteSpace($env:INSTALL_APACHE) ? 1 : [int]$env:INSTALL_APACHE;
-[bool]$downloadApache = [string]::IsNullOrWhiteSpace($env:DOWNLOAD_APACHE) ? 1 : [int]$env:DOWNLOAD_APACHE;
-[bool]$apachePathRegister = [string]::IsNullOrWhiteSpace($env:REGISTER_PATH_APACHE) ? 1 : [int]$env:REGISTER_PATH_APACHE;
-$baseApacheName = [string]::IsNullOrWhiteSpace($env:APACHE_BASE) ? "httpd-2.4.63-250207-win64-VS17.zip" : [string]$env:APACHE_BASE;
-
-[bool]$installNginx = [string]::IsNullOrWhiteSpace($env:INSTALL_NGINX) ? 1 : [int]$env:INSTALL_NGINX;
-[bool]$downloadNginx = [string]::IsNullOrWhiteSpace($env:DOWNLOAD_NGINX) ? 1 : [int]$env:DOWNLOAD_NGINX;
-$baseNginxName = [string]::IsNullOrWhiteSpace($env:NGINX_BASE) ? "nginx-1.28.0.zip" : [string]$env:NGINX_BASE;
-
-# install default to current dir
-$installDir = Path-Cleaning ${PWD} $env:INSTALL_DIR;
-
-[bool]$cleanTmpDir = [string]::IsNullOrWhiteSpace($env:CLEAN_TMP_DIR) ? 1 : [int]$env:CLEAN_TMP_DIR;
-
-# Variable
-$apacheDir = "${installDir}\apache\";
-$nginxDir = "${installDir}\nginx\";
-$phpDir = "${installDir}\PHP\";
-$phpBaseConfig = "php.ini-development";
-
-$htdocs = Path-Cleaning "${apacheDir}htdocs" $env:HTDOCS_DIR;
-
-###################################END MANUAL CONFIG################################################
-$pathName = "WEBSERV";
-$registerPath = '';
-
-$tmpDir = "${PWD}\tmp\";
-if (-not(Test-Path -Path $tmpDir)) {
-    Write-Output("Create TMP");
-    mkdir $tmpDir
-}
-
-# Install VCRedist
-if ($installVCRedist -eq 1) {
-    Write-Output("Install all VCRedist");
-    winget import -i .\source\winget-VCRedist.json --accept-package-agreements --accept-source-agreements --disable-interactivity;
-}
-
-$baseUrl = Get-Content .\source\baseUrl.json | Out-String | ConvertFrom-Json;
-
-$baseUrlPhp = $baseUrl.PHP;
-$baseUrlPhpRelease = $baseUrl.PHP_RELEASE;
-$baseUrlXdebug = $baseUrl.XDEBUG;
-$baseUrlComposer = $baseUrl.COMPOSER;
-$baseUrlComposerLts = $baseUrl.COMPOSER_LTS;
-
-$phpSourceVersions = Get-Content .\source\php-versions.json | Out-String | ConvertFrom-Json;
-$phpSourceConfigExtension = Get-Content .\source\php-config-extension.json | Out-String | ConvertFrom-Json;
-$phpSourceConfigBase = Get-Content .\source\php-config-base.json | Out-String | ConvertFrom-Json;
-$phpSourceConfigXdebug = Get-Content .\source\php-config-xdebug.json | Out-String | ConvertFrom-Json;
-
-$ProgressPreference = 'SilentlyContinue';
-
-$composer = "composer.phar";
-$composerLts = "composer-lts.phar";
-$composerMinimumVersion = 72;
-
-$tmpComposer = "${tmpDir}${composer}";
-$tmpComposerLts = "${tmpDir}${composerLts}";
-
-if ($installComposer -eq 1) {
-    Check-Download $baseUrlComposer $tmpDir $composer;
-
-    Check-Download $baseUrlComposerLts $tmpDir $composerLts;
-}
-
-# Install php
-if ($installPhp -eq 1) {
+# Configuration parameters with default values
+$config = @{
+    InstallVCRedist    = Get-BoolFromEnv $env:INSTALL_VCREDIST
     
-    foreach ($version in $whatToInstall) {
-        $version = $version.Trim();
+    DownloadPhp        = Get-BoolFromEnv $env:DOWNLOAD_PHP
+    InstallXdebug      = Get-BoolFromEnv $env:INSTALL_XDEBUG
+    PhpPathRegister    = Get-BoolFromEnv $env:REGISTER_PATH_PHP
+    
+    InstallComposer    = Get-BoolFromEnv $env:INSTALL_COMPOSER
+    
+    InstallApache      = Get-BoolFromEnv $env:INSTALL_APACHE
+    DownloadApache     = Get-BoolFromEnv $env:DOWNLOAD_APACHE
+    ApachePathRegister = Get-BoolFromEnv $env:REGISTER_PATH_APACHE
+    
+    InstallNginx       = Get-BoolFromEnv $env:INSTALL_NGINX
+    DownloadNginx      = Get-BoolFromEnv $env:DOWNLOAD_NGINX
+    NginxPathRegister  = Get-BoolFromEnv $env:REGISTER_PATH_NGINX
+    
+    CleanTmpDir        = Get-BoolFromEnv $env:CLEAN_TMP_DIR
+}
 
-        $type = $typeToInstall;
-        $phpInstallDir = $phpDir;
+# Version and type configurations
+$basePhpVersions = "v5.4, v5.5, v5.6, v7.0, v7.1, v7.2, v7.3, v7.4, v8.0, v8.1, v8.2, v8.3, v8.4"
+$whatToInstall = if ([string]::IsNullOrWhiteSpace($env:INSTALL_PHP_VERSION)) { 
+    $basePhpVersions 
+}
+else { 
+    $env:INSTALL_PHP_VERSION 
+}
+$whatToInstall = $whatToInstall.Replace('"', '').Replace("'", "").Split(",").Trim()
+$typeToInstall = "NTS"  # or "TS" for thread-safe version
 
-        $phpData = $phpSourceVersions.$version;
+# Directory configurations
+$installDir = Path-Cleaning $PWD $env:INSTALL_DIR
+$apacheDir = Join-Path $installDir "apache"
+$nginxDir = Join-Path $installDir "nginx"
+$phpDir = Join-Path $installDir "PHP"
+$phpBaseConfig = "php.ini-development"
+$htdocs = Path-Cleaning (Join-Path $apacheDir "htdocs") $env:HTDOCS_DIR
+
+# Initialize paths and temp directory
+$pathName = "WEBSERV"
+$registerPath = @()
+$tmpDir = Join-Path $PWD "tmp/"
+
+if (-not (Test-Path -Path $tmpDir)) {
+    New-Item -ItemType Directory -Path $tmpDir | Out-Null
+    Write-Output "Created TMP directory"
+}
+
+# Load configuration files
+$baseUrl = Get-Content .\source\baseUrl.json | ConvertFrom-Json
+$phpSourceVersions = Get-Content .\source\php-versions.json | ConvertFrom-Json
+$phpSourceConfigExtension = Get-Content .\source\php-config-extension.json | ConvertFrom-Json
+$phpSourceConfigBase = Get-Content .\source\php-config-base.json | ConvertFrom-Json
+$phpSourceConfigXdebug = Get-Content .\source\php-config-xdebug.json | ConvertFrom-Json
+
+# Set progress preference
+$ProgressPreference = 'SilentlyContinue'
+
+# Install VCRedist if needed
+if ($config.InstallVCRedist) {
+    Write-Output "Installing all VCRedist packages"
+    winget import -i .\source\winget-VCRedist.json --accept-package-agreements --accept-source-agreements --disable-interactivity
+}
+
+# Composer configuration
+$composerConfig = @{
+    Main           = "composer.phar"
+    Lts            = "composer-lts.phar"
+    MinimumVersion = 72
+    MainPath       = Join-Path $tmpDir "composer.phar"
+    LtsPath        = Join-Path $tmpDir "composer-lts.phar"
+}
+
+if ($config.InstallComposer) {
+    Check-Download $baseUrl.COMPOSER $tmpDir $composerConfig.Main
+    Check-Download $baseUrl.COMPOSER_LTS $tmpDir $composerConfig.Lts
+}
+
+# PHP Installation
+foreach ($version in $whatToInstall) {
+    $phpData = $phpSourceVersions.$version
         
-        # Download PHP
-        $phpBaseFile = $phpData.name;
-        if ($type -ne "NTS") {
-            $phpBaseFile = $phpBaseFile.replace("-nts", "");
-        }
-        if ($phpData.download -eq "release") {
-            $url = "${baseUrlPhpRelease}${phpBaseFile}";
-        }
-        else {
-            $url = "${baseUrlPhp}${phpBaseFile}";
-        }
-        $tmpDownload = "${tmpDir}${phpBaseFile}";
-
-        if ($downloadPhp -eq 1) {
-            Write-Output("Download ${phpBaseFile} to ${tmpDir}");
-            Download-File $url $tmpDownload
-        }
-        else{
-            Check-Download $url $tmpDir $phpBaseFile;
-        }
-
-        if ($installXdebug -eq 1) {
-            # Install Xdebug
-            $phpXdebug = $phpData.xdebug;
-            if ($type -ne "NTS") {
-                $phpXdebug = $phpXdebug.replace("-nts", "");
-            }
-            $url = "${baseUrlXdebug}${phpXdebug}";
-            $tmpDownloadXdebug = "${tmpDir}${phpXdebug}";
-
-            Check-Download $url $tmpDir $phpXdebug;
-        }
+    # Download PHP
+    $phpBaseFile = if ($typeToInstall -eq "NTS") { $phpData.name } else { $phpData.name.Replace("-nts", "") }
+    $url = if ($phpData.download -eq "release") { 
+        "$($baseUrl.PHP_RELEASE)$phpBaseFile" 
+    }
+    else { 
+        "$($baseUrl.PHP)$phpBaseFile" 
+    }
+        
+    if ($config.DownloadPhp) {
+        Write-Output "Downloading $phpBaseFile to $tmpDir"
+        Download-File $url (Join-Path $tmpDir $phpBaseFile)
+    }
+    else {
+        Check-Download $url $tmpDir $phpBaseFile
     }
 
-    foreach ($version in $whatToInstall) {
-        $version = $version.Trim();
-
-        $type = $typeToInstall;
-        $phpInstallDir = $phpDir;
-
-        $phpData = $phpSourceVersions.$version;
-        
-        # Download PHP
-        $phpBaseFile = $phpData.name;
-        if ($type -ne "NTS") {
-            $phpBaseFile = $phpBaseFile.replace("-nts", "");
-        }
-        $tmpDownload = "${tmpDir}${phpBaseFile}";
-
-        # Extract PHP
-        $phpVersionDir = $phpData.alias;
-        $phpDirExtract = "${phpInstallDir}${phpVersionDir}\";
-        
-        if (-not(Test-Path -Path $phpDirExtract)) {
-            mkdir $phpDirExtract;
-        }
-        else {
-            Remove-Item -Recurse $phpDirExtract;
-            mkdir $phpDirExtract;
-        }
-
-        Write-Output("Extract ${phpBaseFile} to ${phpDirExtract}");
-        Expand-Archive -Path $tmpDownload -DestinationPath $phpDirExtract;
-
-        # Copy Config
-        Write-Output("Create Config php.ini");
-        $phpIni = "${phpDirExtract}\php.ini";
-        Copy-Item "${phpDirExtract}\${phpBaseConfig}" $phpIni;
-        Copy-Item "${phpDirExtract}\php.exe" "${phpDirExtract}\php${phpVersionDir}.exe";
-        Copy-Item "${phpDirExtract}\php-cgi.exe" "${phpDirExtract}\php${phpVersionDir}-cgi.exe";
-
-        # Config Extension
-        $typeConfig = $phpData.config;
-        $copyConfig = $phpSourceConfigExtension.$typeConfig;
-        foreach ($value in $copyConfig) {
-            $search = ";${value}";
-            $replace = $value;
-                (Get-Content -Path $phpIni) -replace $search, $replace | Set-Content $phpIni;
-
-            $search = "; ${value}";
-            $replace = $value;
-                (Get-Content -Path $phpIni) -replace $search, $replace | Set-Content $phpIni;
-        }
-
-        # Config Add
-        $copyConfig = $phpSourceConfigBase.base;
-        foreach ($value in $copyConfig) {
-            $string = $value;
-            Add-Content -Path $phpIni -Value $string;
-        }
-
-        $search = "{PHP_INSTALL_DIR}";
-        $replace = "${phpInstallDir}";
-            (Get-Content -Path $phpIni) -replace $search, $replace | Set-Content $phpIni;
-
-        $search = "{VERSION}";
-        $replace = "${phpVersionDir}";
-            (Get-Content -Path $phpIni) -replace $search, $replace | Set-Content $phpIni;
-
-        if ($installXdebug -eq 1) {
-            $copyConfigXdebug = $phpSourceConfigXdebug.$typeConfig;
-            foreach ($value in $copyConfigXdebug) {
-                $string = $value;
-                Add-Content -Path $phpIni -Value $string;
-            }
-
-            # Install Xdebug
-            $phpXdebug = $phpData.xdebug;
-            if ($type -ne "NTS") {
-                $phpXdebug = $phpXdebug.replace("-nts", "");
-            }
-            $tmpDownloadXdebug = "${tmpDir}${phpXdebug}";
-
-            Write-Output("Install ${phpXdebug}");
-            Copy-Item "${tmpDownloadXdebug}" "${phpDirExtract}\ext\php_xdebug.dll";
-
-            $search = "php_xdebug.dll";
-            $replace = "${phpDirExtract}ext\php_xdebug.dll";
-                (Get-Content -Path $phpIni) -replace $search, $replace | Set-Content $phpIni;
-        }
-
-        if ($installComposer -eq 1) {
-            $composerTmpInstalled = [int]$phpVersionDir -ge $composerMinimumVersion ? $tmpComposer : $tmpComposerLts;
-            Copy-Item $composerTmpInstalled "${phpDirExtract}\composer.phar";
-            
-            $composerInstallVer = "${phpDirExtract}\composer${phpVersionDir}.bat";
-            Copy-Item .\source\composer.bat $composerInstallVer;
-
-            $composerInstall = "${phpDirExtract}\composer.bat";
-            Copy-Item .\source\composer.bat $composerInstall;
-        }
-
-        $tmpPath = $registerPath;
-        $registerPath = $phpDirExtract + ";" + $tmpPath;
+    # Download Xdebug if needed
+    if ($config.InstallXdebug) {
+        $phpXdebug = if ($typeToInstall -eq "NTS") { $phpData.xdebug } else { $phpData.xdebug.Replace("-nts", "") }
+        $xdebugUrl = "$($baseUrl.XDEBUG)$phpXdebug"
+        Check-Download $xdebugUrl $tmpDir $phpXdebug
     }
 }
 
-# install Apache
-if ($installApache -eq 1) {
-    if ((Test-Path -Path $apacheDir)) {
-        Remove-Item -Recurse $apacheDir;
+# Process each PHP version
+foreach ($version in $whatToInstall) {
+    $phpData = $phpSourceVersions.$version
+    $phpBaseFile = if ($typeToInstall -eq "NTS") { $phpData.name } else { $phpData.name.Replace("-nts", "") }
+    $phpVersionDir = $phpData.alias
+    $phpDirExtract = Join-Path $phpDir $phpVersionDir
+
+    # Clean and create directory
+    if (Test-Path $phpDirExtract) {
+        Remove-Item -Recurse -Force $phpDirExtract
+    }
+    New-Item -ItemType Directory -Path $phpDirExtract | Out-Null
+
+    # Extract PHP
+    Write-Output "Extracting $phpBaseFile to $phpDirExtract"
+    Expand-Archive -Path (Join-Path $tmpDir $phpBaseFile) -DestinationPath $phpDirExtract
+
+    # Configure PHP
+    $phpIni = Join-Path $phpDirExtract "php.ini"
+    Copy-Item (Join-Path $phpDirExtract $phpBaseConfig) $phpIni
+    Copy-Item (Join-Path $phpDirExtract "php.exe") (Join-Path $phpDirExtract "php${phpVersionDir}.exe")
+    Copy-Item (Join-Path $phpDirExtract "php-cgi.exe") (Join-Path $phpDirExtract "php${phpVersionDir}-cgi.exe")
+
+    # Configure extensions
+    $typeConfig = $phpData.config
+    $copyConfig = $phpSourceConfigExtension.$typeConfig
+    foreach ($value in $copyConfig) {
+        (Get-Content $phpIni) -replace ";$value", $value -replace "; $value", $value | Set-Content $phpIni
     }
 
-    $urlApache = $baseUrl.APACHE;
-    $urlApache = "${urlApache}/${baseApacheName}";
-    $urlApacheFcgi = $baseUrl.APACHE_FCGI;
+    # Add base configuration
+    $phpSourceConfigBase.base | ForEach-Object {
+        Add-Content -Path $phpIni -Value $_
+    }
 
-    $tmpDownload = "${tmpDir}";
-    $tmpDownloadApache = "${tmpDownload}/APACHE.zip";
-    $tmpDownloadApacheFcgi = "${tmpDownload}/APACHE_FCGI.zip";
+    # Replace placeholders
+    (Get-Content $phpIni) -replace "{PHP_INSTALL_DIR}", $phpDir -replace "{VERSION}", $phpVersionDir | Set-Content $phpIni
 
-    if ($downloadApache -eq 1) {
-        Write-Output("Download APACHE");
+    # Install Xdebug if needed
+    if ($config.InstallXdebug) {
+        $phpXdebug = if ($typeToInstall -eq "NTS") { $phpData.xdebug } else { $phpData.xdebug.Replace("-nts", "") }
+        $xdebugPath = Join-Path $phpDirExtract "ext\php_xdebug.dll"
+        Copy-Item (Join-Path $tmpDir $phpXdebug) $xdebugPath
 
-        Download-File $urlApache $tmpDownloadApache;
+        $phpSourceConfigXdebug.$typeConfig | ForEach-Object {
+            Add-Content -Path $phpIni -Value $_
+        }
 
+        (Get-Content $phpIni) -replace "php_xdebug.dll", $xdebugPath | Set-Content $phpIni
+    }
+
+    # Install Composer if needed
+    if ($config.InstallComposer) {
+        $composerSource = if ([int]$phpVersionDir -ge $composerConfig.MinimumVersion) { 
+            $composerConfig.MainPath 
+        }
+        else { 
+            $composerConfig.LtsPath 
+        }
+        Copy-Item $composerSource (Join-Path $phpDirExtract "composer.phar")
+            
+        $composerBat = Join-Path $phpDirExtract "composer.bat"
+        $composerVerBat = Join-Path $phpDirExtract "composer${phpVersionDir}.bat"
+        Copy-Item .\source\composer.bat $composerBat
+        Copy-Item .\source\composer.bat $composerVerBat
+    }
+
+    # Add to PATH if needed
+    if ($config.PhpPathRegister) {
+        $registerPath += $phpDirExtract
+    }
+}
+
+# Apache Installation
+if ($config.InstallApache) {
+    if (Test-Path $apacheDir) {
+        Remove-Item -Recurse -Force $apacheDir
+    }
+
+    $baseApacheName = $env:APACHE_BASE ?? "httpd-2.4.63-250207-win64-VS17.zip"
+    $urlApache = "$($baseUrl.APACHE)/$baseApacheName"
+    $urlApacheFcgi = $baseUrl.APACHE_FCGI
+
+    $tmpDownloadApache = Join-Path $tmpDir "APACHE.zip"
+    $tmpDownloadApacheFcgi = Join-Path $tmpDir "APACHE_FCGI.zip"
+
+    if ($config.DownloadApache) {
+        Write-Output "Downloading Apache"
+        Download-File $urlApache $tmpDownloadApache
         Download-File $urlApacheFcgi $tmpDownloadApacheFcgi
     }
     else {
-        Check-Download $urlApache $tmpDownload "APACHE.zip";
-        
-        Check-Download $urlApacheFcgi $tmpDownload "APACHE_FCGI.zip";
+        Check-Download $urlApache $tmpDir "APACHE.zip"
+        Check-Download $urlApacheFcgi $tmpDir "APACHE_FCGI.zip"
     }
 
-    $dirTmpApache = "${tmpDownload}/APACHE";
-    if (-not(Test-Path -Path $dirTmpApache)) {
-        mkdir $dirTmpApache;
+    # Extract Apache
+    $dirTmpApache = Join-Path $tmpDir "APACHE"
+    if (Test-Path $dirTmpApache) {
+        Remove-Item -Recurse -Force $dirTmpApache
     }
-    else {
-        Remove-Item -Recurse $dirTmpApache;
-        mkdir $dirTmpApache;
-    }
-    Expand-Archive -Path $tmpDownloadApache -DestinationPath $dirTmpApache;
+    New-Item -ItemType Directory -Path $dirTmpApache | Out-Null
+    Expand-Archive -Path $tmpDownloadApache -DestinationPath $dirTmpApache
     
-    $dirTmpApacheSub = Get-ChildItem -Path $dirTmpApache -Directory -Name;
-    Move-Item "${dirTmpApache}/${dirTmpApacheSub}" $apacheDir;
+    $dirTmpApacheSub = Get-ChildItem -Path $dirTmpApache -Directory | Select-Object -First 1 -ExpandProperty Name
+    Move-Item (Join-Path $dirTmpApache $dirTmpApacheSub) $apacheDir
 
-    $dirTmpApacheFcgi = "${tmpDownload}/APACHE_FCGI";
-    if (-not(Test-Path -Path $dirTmpApacheFcgi)) {
-        mkdir $dirTmpApacheFcgi;
+    # Extract FCGI module
+    $dirTmpApacheFcgi = Join-Path $tmpDir "APACHE_FCGI"
+    if (Test-Path $dirTmpApacheFcgi) {
+        Remove-Item -Recurse -Force $dirTmpApacheFcgi
     }
-    else {
-        Remove-Item -Recurse $dirTmpApacheFcgi;
-        mkdir $dirTmpApacheFcgi;
-    }
-    Expand-Archive -Path $tmpDownloadApacheFcgi -DestinationPath $dirTmpApacheFcgi;
+    New-Item -ItemType Directory -Path $dirTmpApacheFcgi | Out-Null
+    Expand-Archive -Path $tmpDownloadApacheFcgi -DestinationPath $dirTmpApacheFcgi
+    Move-Item (Join-Path $dirTmpApacheFcgi "mod_fcgid.so") (Join-Path $apacheDir "modules\mod_fcgid.so")
 
-    Move-Item "${dirTmpApacheFcgi}/mod_fcgid.so" "${apacheDir}/modules/mod_fcgid.so";
-
-    # Config APACHE
-    $httpdConf = "${apacheDir}conf/httpd.conf";
-    Move-Item $httpdConf "${httpdConf}.tmp";
+    # Configure Apache
+    $httpdConf = Join-Path $apacheDir "conf\httpd.conf"
+    Move-Item $httpdConf "$httpdConf.tmp" -Force
     Copy-Item .\source\apache\httpd.conf $httpdConf
 
-    $apacheDirRevert = $apacheDir -replace "\\", '/';
-    $search = "{{ROOT}}";
-    $replace = $apacheDirRevert;
-    (Get-Content -Path $httpdConf) -replace $search, $replace | Set-Content $httpdConf;
+    $apacheDirRevert = $apacheDir.Replace("\", "/")
+    (Get-Content $httpdConf) -replace "{{ROOT}}", $apacheDirRevert | Set-Content $httpdConf
 
-    $search = "{{LISTEN_PORT}}";
-    $replace = "";
-    $modifyFile = $httpdConf;
-    foreach ($version in $whatToInstall) {
-        $version = $version.Trim();
-        $phpData = $phpSourceVersions.$version;
-        $alias = $phpData.alias
-        $replace = "${replace}`nListen 80${alias}";
+    # Configure listening ports
+    $listenPorts = $whatToInstall | ForEach-Object {
+        $version = $_.Trim()
+        $alias = $phpSourceVersions.$version.alias
+        "Listen 80$alias"
     }
-    (Get-Content -Path $modifyFile) -replace $search, $replace | Set-Content $modifyFile;
+    (Get-Content $httpdConf) -replace "{{LISTEN_PORT}}", ($listenPorts -join "`n") | Set-Content $httpdConf
 
-    $httpdVhostConf = "${apacheDir}conf/extra/httpd-vhosts.conf";
-    Move-Item $httpdVhostConf "${apacheDir}conf/extra/httpd-vhosts.conf.tmp";
-    Copy-Item .\source\apache\httpd-vhosts.conf $httpdVhostConf;
+    # Configure virtual hosts
+    $httpdVhostConf = Join-Path $apacheDir "conf\extra\httpd-vhosts.conf"
+    Move-Item $httpdVhostConf "$httpdVhostConf.tmp" -Force
+    Copy-Item .\source\apache\httpd-vhosts.conf $httpdVhostConf
 
-    $search = "{{HTDOCS}}";
-    $replace = $htdocs -replace "\\", '/';
-    $modifyFile = $httpdVhostConf;
-    (Get-Content -Path $modifyFile) -replace $search, $replace | Set-Content $modifyFile;
+    $htdocsRevert = $htdocs.Replace("\", "/")
+    (Get-Content $httpdVhostConf) -replace "{{HTDOCS}}", $htdocsRevert | Set-Content $httpdVhostConf
+    (Get-Content $httpdVhostConf) -replace "{{PHP}}", $phpDir.Replace("\", "/") | Set-Content $httpdVhostConf
 
-    $search = "{{PHP}}";
-    $replace = $phpDir -replace "\\", '/';
-    $modifyFile = $httpdVhostConf;
-    (Get-Content -Path $modifyFile) -replace $search, $replace | Set-Content $modifyFile;
+    # Copy additional host configurations
+    $hostConfDir = Join-Path $apacheDir "conf\extra\host"
+    New-Item -ItemType Directory -Path $hostConfDir -Force | Out-Null
+    Copy-Item -Path .\source\apache\host\* -Destination $hostConfDir -Recurse
 
-    mkdir "${apacheDir}conf/extra/host/";
-    Copy-Item -Path .\source\apache\host\* -Destination "${apacheDir}conf/extra/host/" -Recurse;
+    # Copy utility scripts
+    Copy-Item -Path .\source\apache\registerApache.ps1 (Join-Path $apacheDir "bin\registerApache.ps1")
+    Copy-Item -Path .\source\apache\unistallAPache.ps1 (Join-Path $apacheDir "bin\unistallAPache.ps1")
 
-    Copy-Item -Path .\source\apache\registerApache.ps1 "${apacheDir}\bin\registerApache.ps1";
-    Copy-Item -Path .\source\apache\unistallAPache.ps1 "${apacheDir}\bin\unistallAPache.ps1";
-
-    if ($apachePathRegister) {
-        $tmpPath = $registerPath;
-        $registerPath = $apacheDir + "bin;" + $tmpPath;
+    # Add to PATH if needed
+    if ($config.ApachePathRegister) {
+        $registerPath += (Join-Path $apacheDir "bin")
     }
 }
 
-if ($installNginx -eq 1) {
-    if ((Test-Path -Path $nginxDir)) {
-        Remove-Item -Recurse $nginxDir;
+# Nginx Installation
+if ($config.InstallNginx) {
+    if (Test-Path $nginxDir) {
+        Remove-Item -Recurse -Force $nginxDir
     }
 
-    $urlNginx = $baseUrl.NGINX;
-    $urlNginx = "${urlNginx}/${baseNginxName}";
+    $baseNginxName = $env:NGINX_BASE ?? "nginx-1.28.0.zip"
+    $urlNginx = "$($baseUrl.NGINX)/$baseNginxName"
+    $tmpDownloadNginx = Join-Path $tmpDir $baseNginxName
 
-    $tmpDownload = "${tmpDir}";
-    $tmpDownloadNginx = "${tmpDownload}/${baseNginxName}";
-
-    if ($downloadApache -eq 1) {
-        Write-Output("Download NGINX");
-
-        Download-File $urlApache $baseNginxName;
+    if ($config.DownloadNginx) {
+        Write-Output "Downloading Nginx"
+        Download-File $urlNginx $tmpDownloadNginx
     }
     else {
-        Check-Download $urlNginx $tmpDownload $baseNginxName;
+        Check-Download $urlNginx $tmpDir $baseNginxName
     }
 
-    $dirTmpNginx = "${tmpDownload}/NGINX";
-    if (-not(Test-Path -Path $dirTmpNginx)) {
-        mkdir $dirTmpNginx;
+    # Extract Nginx
+    $dirTmpNginx = Join-Path $tmpDir "NGINX"
+    if (Test-Path $dirTmpNginx) {
+        Remove-Item -Recurse -Force $dirTmpNginx
     }
-    else {
-        Remove-Item -Recurse $dirTmpNginx;
-        mkdir $dirTmpNginx;
+    New-Item -ItemType Directory -Path $dirTmpNginx | Out-Null
+    Expand-Archive -Path $tmpDownloadNginx -DestinationPath $dirTmpNginx
+
+    $dirTmpNginxSub = Get-ChildItem -Path $dirTmpNginx -Directory | Select-Object -First 1 -ExpandProperty Name
+    Move-Item (Join-Path $dirTmpNginx $dirTmpNginxSub) $nginxDir
+
+    # # Configure Nginx
+    $conf = Join-Path $nginxDir "conf\nginx.conf"
+    Move-Item $conf "$conf.tmp" -Force
+    Copy-Item .\source\nginx\nginx.conf $conf
+
+    $htdocsRevert = $htdocs.Replace("\", "/")
+    (Get-Content $conf) -replace "{{HTDOCS}}", $htdocsRevert | Set-Content $conf
+
+    # Copy additional host configurations
+    $hostConfDir = Join-Path $nginxDir "conf\server"
+    New-Item -ItemType Directory -Path $hostConfDir -Force | Out-Null
+    Copy-Item -Path .\source\nginx\server\* -Destination $hostConfDir -Recurse
+
+    # configure runner 
+    $nginxRunner = Join-Path $nginxDir "webserver_nginx.bat"
+    Copy-Item -Path .\source\nginx\webserver_nginx.bat $nginxRunner
+    
+    (Get-Content $nginxRunner) -replace "{{ROOT}}", $nginxDir | Set-Content $nginxRunner
+    (Get-Content $nginxRunner) -replace "{{PHP_DIR}}", $phpDir | Set-Content $nginxRunner
+
+    # Add to PATH if needed
+    if ($config.NginxPathRegister) {
+        $registerPath += $nginxDir
     }
-    Expand-Archive -Path $tmpDownloadNginx -DestinationPath $dirTmpNginx;
-
-    # Config
-    $conf = "${nginxDir}conf/nginx.conf";
-    Move-Item $conf "${conf}.tmp";
-    Copy-Item .\source\nginx\nginx.conf $conf;
-
-    $search = "{{HTDOCS}}";
-    $replace = $htdocs -replace "\\", '/';
-    $modifyFile = $conf;
-    (Get-Content -Path $modifyFile) -replace $search, $replace | Set-Content $modifyFile;
-    Copy-Item .\source\nginx\nginx.conf $conf;
-
-    $search = "{{ROOT}}";
-    $replace = $nginxDir -replace "\\", '/';
-    $modifyFile = $conf;
-    (Get-Content -Path $modifyFile) -replace $search, $replace | Set-Content $modifyFile;
 }
 
-if ($cleanTmpDir -eq 1) {
-    Remove-Item -Recurse $tmpDir; 
-} 
+# Cleanup
+if ($config.CleanTmpDir) {
+    Remove-Item -Recurse -Force $tmpDir
+}
 
-if ($phpPathRegister -or $apachePathRegister) {
-    Register-Path-Web $pathName $registerPath;
+# Register paths
+if ($config.PhpPathRegister -or $config.ApachePathRegister -or $config.NginxPathRegister) {
+    Register-Path-Web $pathName ($registerPath -join ";")
 }
