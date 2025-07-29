@@ -87,6 +87,7 @@ if ($installComposer -eq 1) {
 
 # Install php
 if ($installPhp -eq 1) {
+    
     foreach ($version in $whatToInstall) {
         $version = $version.Trim();
 
@@ -115,6 +116,34 @@ if ($installPhp -eq 1) {
         else{
             Check-Download $url $tmpDir $phpBaseFile;
         }
+
+        if ($installXdebug -eq 1) {
+            # Install Xdebug
+            $phpXdebug = $phpData.xdebug;
+            if ($type -ne "NTS") {
+                $phpXdebug = $phpXdebug.replace("-nts", "");
+            }
+            $url = "${baseUrlXdebug}${phpXdebug}";
+            $tmpDownloadXdebug = "${tmpDir}${phpXdebug}";
+
+            Check-Download $url $tmpDir $phpXdebug;
+        }
+    }
+
+    foreach ($version in $whatToInstall) {
+        $version = $version.Trim();
+
+        $type = $typeToInstall;
+        $phpInstallDir = $phpDir;
+
+        $phpData = $phpSourceVersions.$version;
+        
+        # Download PHP
+        $phpBaseFile = $phpData.name;
+        if ($type -ne "NTS") {
+            $phpBaseFile = $phpBaseFile.replace("-nts", "");
+        }
+        $tmpDownload = "${tmpDir}${phpBaseFile}";
 
         # Extract PHP
         $phpVersionDir = $phpData.alias;
@@ -178,11 +207,9 @@ if ($installPhp -eq 1) {
             if ($type -ne "NTS") {
                 $phpXdebug = $phpXdebug.replace("-nts", "");
             }
-            $url = "${baseUrlXdebug}${phpXdebug}";
             $tmpDownloadXdebug = "${tmpDir}${phpXdebug}";
 
             Write-Output("Install ${phpXdebug}");
-            Check-Download $url $tmpDir $phpXdebug;
             Copy-Item "${tmpDownloadXdebug}" "${phpDirExtract}\ext\php_xdebug.dll";
 
             $search = "php_xdebug.dll";
