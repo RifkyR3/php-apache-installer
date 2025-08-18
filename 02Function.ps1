@@ -1,28 +1,59 @@
-Function Download-File($URL, $pathName) {
-    $request = [System.Net.WebRequest]::Create($URL)
-    $request.AllowAutoRedirect = $true
-    $request.UserAgent = 'Mozilla/5.0 (Windows NT; Windows NT 10.0; en-US) AppleWebKit/534.6 (KHTML, like Gecko) Chrome/7.0.500.0 Safari/534.6' #helps with difficult pages...
+function Download-File {
+    param(
+        [string]$URL,
+        [string]$pathName
+    )
 
-    try {
-        $response = $request.GetResponse()
-        $redirectedURL = $response.ResponseUri.AbsoluteUri
-        $response.Close()
-    }
-    catch {
-        "Error: $_"
-    }
+    $MaxRetries = 3
+    $RetryCount = 0
 
-    # echo $redirectedURL;
-    # Invoke-WebRequest -URI $redirectedURL -OutFile $pathName -MaximumRedirection 0 -AllowInsecureRedirect
-    curl -L -o $pathName $redirectedURL
+    while ($RetryCount -lt $MaxRetries) {
+        if (Test-Path $pathName) {
+            Remove-Item $pathName -Force
+            Write-Output "Deleted incomplete file: $pathName"
+        }
+
+        try {
+            Write-Output "Attempt $($RetryCount + 1): curl -L -o $pathName $URL"
+            $curlArgs = "-L", "--fail", "-o", $pathName, $URL
+            & curl @curlArgs
+            $exitCode = $LASTEXITCODE
+            if ($exitCode -eq 0) {
+                Write-Output "Download succeeded: $pathName"
+                return
+            }
+            else {
+                throw "curl exited with code $exitCode"
+            }
+        }
+        catch {
+            $RetryCount++
+            if ($RetryCount -ge $MaxRetries) {
+                throw "Download failed after $MaxRetries attempts: $URL. Error: $_"
+            }
+            else {
+                Write-Warning "Download failed, retrying... ($RetryCount/$MaxRetries): $_"
+                Start-Sleep -Seconds (2 * $RetryCount)
+            }
+        }
+    }
 }
 
-function Check-Download($URL, $path, $name){
-    $pathName = $path + $name;
-    if (-not(Test-Path -Path $pathName)) {
-        Write-Output("Not Found. Download ${name} to ${pathName}");
-        
-        Download-File $URL $pathName;
+function Check-Download {
+    param(
+        [string]$URL,
+        [string]$path,
+        [string]$name
+    )
+
+    $pathName = Join-Path $path $name
+    if (-not (Test-Path $pathName)) {
+        Write-Output "Not found. Downloading $name to $pathName"
+        # Reuse Download-File which already throws on failure
+        Download-File $URL $pathName
+    }
+    else {
+        Write-Output "Already exists: $pathName"
     }
 }
 

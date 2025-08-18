@@ -97,17 +97,39 @@ foreach ($version in $whatToInstall) {
         
     if ($config.DownloadPhp) {
         Write-Output "Downloading $phpBaseFile to $tmpDir"
-        Download-File $url (Join-Path $tmpDir $phpBaseFile)
+        try {
+            Download-File $url (Join-Path $tmpDir $phpBaseFile)
+        }
+        catch {
+            Write-Error "Failed to download PHP $version`: $_"
+            Write-Error "Cancelling installation due to failed download."
+            exit 1  # Stops the entire script with error code
+        }
     }
     else {
-        Check-Download $url $tmpDir $phpBaseFile
+        try {
+            Check-Download $url $tmpDir $phpBaseFile
+        }
+        catch {
+            Write-Error "Failed to download or verify $phpBaseFile`: $_"
+            Write-Error "Cancelling installation."
+            exit 1
+        }
     }
 
     # Download Xdebug if needed
     if ($config.InstallXdebug) {
         $phpXdebug = if ($typeToInstall -eq "NTS") { $phpData.xdebug } else { $phpData.xdebug.Replace("-nts", "") }
         $xdebugUrl = "$($baseUrl.XDEBUG)$phpXdebug"
-        Check-Download $xdebugUrl $tmpDir $phpXdebug
+
+        try {
+            Check-Download $xdebugUrl $tmpDir $phpXdebug
+        }
+        catch {
+            Write-Error "Failed to download Xdebug $phpXdebug`: $_"
+            Write-Error "Cancelling installation."
+            exit 1
+        }
     }
 }
 
@@ -259,8 +281,9 @@ if ($config.InstallApache) {
     Copy-Item -Path .\source\apache\host\* -Destination $hostConfDir -Recurse
 
     # Copy utility scripts
-    Copy-Item -Path .\source\apache\registerApache.ps1 (Join-Path $apacheDir "bin\registerApache.ps1")
-    Copy-Item -Path .\source\apache\unistallAPache.ps1 (Join-Path $apacheDir "bin\unistallAPache.ps1")
+    Copy-Item -Path .\source\apache\apacheRegister.ps1 (Join-Path $apacheDir "bin\apacheRegister.ps1")
+    Copy-Item -Path .\source\apache\apacheUnistall.ps1 (Join-Path $apacheDir "bin\apacheUnistall.ps1")
+    Copy-Item -Path .\source\apache\apacheTest.ps1 (Join-Path $apacheDir "bin\apacheTest.ps1")
 
     # Add to PATH if needed
     if ($config.ApachePathRegister) {
