@@ -169,7 +169,7 @@ foreach ($version in $whatToInstall) {
     }
 
     # Replace placeholders
-    (Get-Content $phpIni) -replace "{PHP_INSTALL_DIR}", $phpDir -replace "{VERSION}", $phpVersionDir | Set-Content $phpIni
+    (Get-Content $phpIni) -replace "{PHP_INSTALL_DIR}", ($phpDir + '/') -replace "{VERSION}", $phpVersionDir | Set-Content $phpIni
 
     # Install Xdebug if needed
     if ($config.InstallXdebug) {
