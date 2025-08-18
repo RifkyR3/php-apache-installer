@@ -186,6 +186,7 @@ foreach ($version in $whatToInstall) {
 
 # Apache Installation
 if ($config.InstallApache) {
+    Write-Output "Install Apache ${apacheDir}"
     if (Test-Path $apacheDir) {
         Remove-Item -Recurse -Force $apacheDir
     }
@@ -269,6 +270,7 @@ if ($config.InstallApache) {
 
 # Nginx Installation
 if ($config.InstallNginx) {
+    Write-Output "Install Nginx ${nginxDir}"
     if (Test-Path $nginxDir) {
         Remove-Item -Recurse -Force $nginxDir
     }
