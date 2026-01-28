@@ -24,7 +24,7 @@ $config = @{
 }
 
 # Version and type configurations
-$basePhpVersions = "v5.4, v5.5, v5.6, v7.0, v7.1, v7.2, v7.3, v7.4, v8.0, v8.1, v8.2, v8.3, v8.4"
+$basePhpVersions = "v5.4, v5.5, v5.6, v7.0, v7.1, v7.2, v7.3, v7.4, v8.0, v8.1, v8.2, v8.3, v8.4, v8.5"
 $whatToInstall = if ([string]::IsNullOrWhiteSpace($env:INSTALL_PHP_VERSION)) { 
     $basePhpVersions 
 }
