@@ -1,7 +1,7 @@
 {
     "NGINX": "http://nginx.org/download/",
-    "APACHE": "https://www.apachelounge.com/download/VS17/binaries",
-    "APACHE_FCGI": "https://www.apachelounge.com/download/VS17/modules/mod_fcgid-2.3.10-win64-VS17.zip",
+    "APACHE": "https://www.apachelounge.com/download/VS18/binaries",
+    "APACHE_FCGI": "https://www.apachelounge.com/download/VS18/modules/mod_fcgid-2.3.10-win64-VS18.zip",
     "PHP": "https://windows.php.net/downloads/releases/archives/",
     "PHP_RELEASE": "https://windows.php.net/downloads/releases/",
     "XDEBUG": "https://xdebug.org/files/",
