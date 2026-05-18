@@ -105,14 +105,18 @@ Usage examples:
 # Check for updates (no write)
 pwsh -NoProfile .\source\Update-PHPVersions.ps1
 
-# Apply detected updates to JSON (default prefers 64-bit packages)
+# Apply detected updates to JSON and environment sample (default prefers 64-bit packages)
 pwsh -NoProfile .\source\Update-PHPVersions.ps1 -Update
 
 # Apply updates but do NOT prefer x64 (choose any matching architecture)
 pwsh -NoProfile .\source\Update-PHPVersions.ps1 -Update -Prefer64:$false
+
+# Apply updates and target a different env sample file (relative to script)
+pwsh -NoProfile .\source\Update-PHPVersions.ps1 -Update -EnvPath "..\.env.sample"
 ```
 
 Notes:
-- The script reads `source/baseUrl.json` to locate PHP and Xdebug directories.
+- The script reads `source/baseUrl.json` to locate PHP and Xdebug directories and now also checks https://www.apachelounge.com/download/ to detect newer `APACHE_BASE` filenames.
+- When run with `-Update` the script will update `APACHE_BASE` inside the specified env sample file (default: `..\.env.sample`) and will also update `../.env` if that file exists.
 - By default the script prefers x64 (x86_64) binaries when available. Use `-Prefer64:$false` to disable.
 - This script is a convenience/reference tool; review changes before committing.

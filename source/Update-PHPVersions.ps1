@@ -23,7 +23,8 @@
 param(
     [switch]$Update,
     [string]$JsonPath = ".\php-versions.json",
-    [bool]$Prefer64 = $true
+    [bool]$Prefer64 = $true,
+    [string]$EnvPath = "..\.env.sample"
 )
 
 function Write-Log {
@@ -159,6 +160,9 @@ $phpArchiveFiles = Get-RemoteDirectoryFiles $baseUrl.PHP
 $phpReleaseFiles = Get-RemoteDirectoryFiles $baseUrl.PHP_RELEASE
 $xdebugFiles = Get-RemoteDirectoryFiles 'https://xdebug.org/download'
 
+# Apache Lounge download listing (for APACHE_BASE)
+$apacheFiles = Get-RemoteDirectoryFiles 'https://www.apachelounge.com/download/'
+
 $changes = @()
 
 foreach ($versionKey in $phpVersions.PSObject.Properties.Name) {
@@ -205,21 +209,97 @@ foreach ($versionKey in $phpVersions.PSObject.Properties.Name) {
     }
 }
 
+# Check for APACHE_BASE updates in environment sample and env files
+$resolvedEnvPath = Resolve-RelativePath $EnvPath
+$envPaths = @()
+if (Test-Path $resolvedEnvPath) { $envPaths += $resolvedEnvPath }
+$resolvedDotEnvPath = Resolve-RelativePath '..\.env'
+if ((Test-Path $resolvedDotEnvPath) -and ($resolvedDotEnvPath -ne $resolvedEnvPath)) {
+    $envPaths += $resolvedDotEnvPath
+}
+
+# Determine latest apache package from apacheFiles
+function Get-ApacheVersionFromFileName {
+    param([string]$FileName)
+    if ($FileName -match '^httpd-(\d+\.\d+\.\d+)') {
+        return [version]$Matches[1]
+    }
+    return $null
+}
+
+function Get-LatestApachePackage {
+    param([string[]]$Files)
+    $candidatePattern = '^httpd-\d+\.\d+\.\d+.*\.zip$'
+    $candidates = $Files | Where-Object { $_ -match $candidatePattern }
+    if (-not $candidates) { return $null }
+
+    $win64Candidates = $candidates | Where-Object { $_ -match 'Win64' }
+    if ($win64Candidates) { $candidates = $win64Candidates }
+
+    return $candidates | Sort-Object {
+        $v = Get-ApacheVersionFromFileName $_
+        if ($null -eq $v) { [version]'0.0.0' } else { $v }
+    } -Descending | Select-Object -First 1
+}
+
+$latestApacheName = Get-LatestApachePackage -Files $apacheFiles
+
+foreach ($targetEnvPath in $envPaths) {
+    $envText = Get-Content $targetEnvPath -Raw
+    if ($envText -match 'APACHE_BASE\s*=\s*(\S+)') {
+        $currentApacheBase = $Matches[1]
+    }
+    else {
+        $currentApacheBase = $null
+    }
+
+    if ($latestApacheName -and $latestApacheName -ne $currentApacheBase) {
+        $apacheChange = [pscustomobject]@{
+            Key = 'APACHE_BASE'
+            Field = 'APACHE_BASE'
+            File = $targetEnvPath
+            Current = $currentApacheBase
+            Latest = $latestApacheName
+        }
+        $changes += $apacheChange
+        if ($Update) {
+            if ($currentApacheBase) {
+                # replace existing APACHE_BASE line using multiline mode so later lines are updated correctly
+                $envText = $envText -replace '(?m)^(APACHE_BASE\s*=\s*).+', "`$1$latestApacheName"
+            }
+            else {
+                # append variable if it does not exist yet, preserving existing file termination without duplicate blank lines
+                $envText = $envText.TrimEnd("`r", "`n")
+                $envText = $envText + "`r`nAPACHE_BASE=$latestApacheName"
+            }
+            Set-Content -Path $targetEnvPath -Value $envText -Encoding UTF8
+        }
+    }
+}
+
 if (-not $changes) {
-    Write-Host 'No updates detected. source/php-versions.json is current.'
+    Write-Host 'No updates detected. source/php-versions.json and env files are current.'
     return
 }
 
 Write-Host "Detected updates for $($changes.Count) field(s):"
 $changes | ForEach-Object {
-    Write-Host "  $($_.Key) - $($_.Field): $($_.Current) -> $($_.Latest)"
+    if ($_.Key -eq 'APACHE_BASE') {
+        Write-Host "  $($_.File): APACHE_BASE: $($_.Current) -> $($_.Latest)"
+    }
+    else {
+        Write-Host "  $($_.Key) - $($_.Field): $($_.Current) -> $($_.Latest)"
+    }
 }
 
 if ($Update) {
     $jsonText = $phpVersions | ConvertTo-Json -Depth 6
     Set-Content -Path $resolvedJsonPath -Value $jsonText -Encoding UTF8
     Write-Host "Updated $resolvedJsonPath"
+    foreach ($change in $changes | Where-Object { $_.Key -eq 'APACHE_BASE' }) {
+        Write-Host "Updated $($change.File)"
+    }
 }
 else {
-    Write-Host "Run with -Update to apply the detected package name changes to the JSON file."
+    Write-Host "Run with -Update to apply the detected package name changes to the JSON file and env files."
 }
