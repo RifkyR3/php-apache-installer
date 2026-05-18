@@ -1,5 +1,9 @@
-if (-not(Test-Path -Path .env)) {
+if (-not (Test-Path -Path .env)) {
     Copy-Item .env.sample .env
+    Write-Output "No .env found; copied defaults from .env.sample"
+}
+else {
+    Write-Output "Loaded environment from .env"
 }
 
 Get-Content .env | ForEach-Object {

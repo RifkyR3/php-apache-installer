@@ -49,8 +49,28 @@ $tmpDir = Join-Path $PWD "tmp/"
 
 if (-not (Test-Path -Path $tmpDir)) {
     New-Item -ItemType Directory -Path $tmpDir | Out-Null
-    Write-Output "Created TMP directory"
+    Write-Output "Created TMP directory: $tmpDir"
 }
+
+Write-Output "=== php-apache-installer configuration ==="
+Write-Output "Install root: $installDir"
+Write-Output "Apache install path: $apacheDir"
+Write-Output "Nginx install path: $nginxDir"
+Write-Output "PHP install path: $phpDir"
+Write-Output "PHP versions: $($whatToInstall -join ', ')"
+Write-Output "Download PHP packages: $($config.DownloadPhp)"
+Write-Output "Install Xdebug: $($config.InstallXdebug)"
+Write-Output "Install Composer: $($config.InstallComposer)"
+Write-Output "Install Apache: $($config.InstallApache)"
+Write-Output "Download Apache packages: $($config.DownloadApache)"
+Write-Output "Register Apache path: $($config.ApachePathRegister)"
+Write-Output "Install Nginx: $($config.InstallNginx)"
+Write-Output "Download Nginx packages: $($config.DownloadNginx)"
+Write-Output "Register Nginx path: $($config.NginxPathRegister)"
+Write-Output "Register PHP path: $($config.PhpPathRegister)"
+Write-Output "Install VC Redist: $($config.InstallVCRedist)"
+Write-Output "Clean temp directory after run: $($config.CleanTmpDir)"
+Write-Output "=== start installation ==="
 
 # Load configuration files
 $baseUrl = Get-Content .\source\baseUrl.json | ConvertFrom-Json
