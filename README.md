@@ -20,7 +20,7 @@ Requirements:
 
 Notes:
 - PHP binaries distributed here depend on the matching Visual C++ runtime for the MSVC toolset used to build that PHP release (e.g. "VS17" builds). Use the `winget` import above or manually install the correct Visual C++ Redistributable for your target PHP builds.
-- The update helper is at [source/Update-PHPVersions.ps1](source/Update-PHPVersions.ps1) and reads [source/baseUrl.json](source/baseUrl.json) to locate downloads on `windows.php.net` and `xdebug.org`.
+- The update helper is at [Update-PHPVersions.ps1](Update-PHPVersions.ps1) and reads [source/baseUrl.json](source/baseUrl.json) to locate downloads on `windows.php.net` and `xdebug.org`.
 
 Quick checks:
 
@@ -59,7 +59,7 @@ pwsh -NoProfile .\install.ps1
 Notes:
 
 - Use environment variables (1/true/on) to enable features. See `install.ps1` for full list of flags.
-- `source/php-versions.json` controls which PHP versions and filenames the installer will download. Use `source/Update-PHPVersions.ps1` to refresh those filenames.
+- `source/php-versions.json` controls which PHP versions and filenames the installer will download. Use `Update-PHPVersions.ps1` to refresh those filenames.
 - The installer creates a `tmp` directory in the working directory for downloads; enable `$env:CLEAN_TMP_DIR` to remove it after the run.
 
 ### PowerShell notes & links
@@ -96,27 +96,27 @@ Useful links:
 
 A small reference PowerShell script is included to check and update the PHP/Xdebug package names listed in `source/php-versions.json`.
 
-- Script path: `source/Update-PHPVersions.ps1`
+- Script path: `Update-PHPVersions.ps1`
 - Purpose: discover latest package filenames on windows.php.net and xdebug.org and optionally write them back to the JSON file.
 
 Usage examples:
 
 ```powershell
 # Check for updates (no write)
-pwsh -NoProfile .\source\Update-PHPVersions.ps1
+pwsh -NoProfile .\Update-PHPVersions.ps1
 
 # Apply detected updates to JSON and environment sample (default prefers 64-bit packages)
-pwsh -NoProfile .\source\Update-PHPVersions.ps1 -Update
+pwsh -NoProfile .\Update-PHPVersions.ps1 -Update
 
 # Apply updates but do NOT prefer x64 (choose any matching architecture)
-pwsh -NoProfile .\source\Update-PHPVersions.ps1 -Update -Prefer64:$false
+pwsh -NoProfile .\Update-PHPVersions.ps1 -Update -Prefer64:$false
 
 # Apply updates and target a different env sample file (relative to script)
-pwsh -NoProfile .\source\Update-PHPVersions.ps1 -Update -EnvPath "..\.env.sample"
+pwsh -NoProfile .\Update-PHPVersions.ps1 -Update -EnvPath ".\.env.sample"
 ```
 
 Notes:
 - The script reads `source/baseUrl.json` to locate PHP and Xdebug directories and now also checks https://www.apachelounge.com/download/ to detect newer `APACHE_BASE` filenames.
-- When run with `-Update` the script will update `APACHE_BASE` inside the specified env sample file (default: `..\.env.sample`) and will also update `../.env` if that file exists.
+- When run with `-Update` the script will update `APACHE_BASE` inside the specified env sample file (default: `.\.env.sample`) and will also update `../.env` if that file exists.
 - By default the script prefers x64 (x86_64) binaries when available. Use `-Prefer64:$false` to disable.
 - This script is a convenience/reference tool; review changes before committing.

@@ -10,3 +10,4 @@
 !source/*/*
 !source/*/*/*
 !.env.sample
+!Update-PHPVersions.ps1

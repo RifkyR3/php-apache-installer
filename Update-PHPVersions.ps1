@@ -13,18 +13,18 @@
     Relative or absolute path to the PHP versions JSON file. Defaults to .\source\php-versions.json.
 
 .EXAMPLE
-    .\source\Update-PHPVersions.ps1
+    .\Update-PHPVersions.ps1
 
 .EXAMPLE
-    .\source\Update-PHPVersions.ps1 -Update
+    .\Update-PHPVersions.ps1 -Update
 #>
 
 [CmdletBinding()]
 param(
     [switch]$Update,
-    [string]$JsonPath = ".\php-versions.json",
+    [string]$JsonPath = ".\source\php-versions.json",
     [bool]$Prefer64 = $true,
-    [string]$EnvPath = "..\.env.sample"
+    [string]$EnvPath = ".\.env.sample"
 )
 
 function Write-Log {
@@ -148,7 +148,7 @@ if (-not (Test-Path $resolvedJsonPath)) {
     throw "PHP versions JSON file not found: $resolvedJsonPath"
 }
 
-$baseUrlPath = Resolve-RelativePath '.\baseUrl.json'
+$baseUrlPath = Resolve-RelativePath '.\source\baseUrl.json'
 if (-not (Test-Path $baseUrlPath)) {
     throw "Base URL JSON file not found: $baseUrlPath"
 }
