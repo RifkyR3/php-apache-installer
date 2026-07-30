@@ -1,0 +1,10 @@
+{
+    "old": [
+        "[imagick]",
+        "extension = php_imagick.dll"
+    ],
+    "new": [
+        "[imagick]",
+        "extension = php_imagick.dll"
+    ]
+}

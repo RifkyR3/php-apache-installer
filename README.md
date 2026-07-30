@@ -11,7 +11,7 @@ Requirements:
 
 - **OS**: Windows 10 or later (recommended). Some helper tools such as the Windows Package Manager (`winget`) and the bundled `curl.exe` are available on recent Windows builds.
 - **PowerShell**: Recommended: PowerShell 7+ (`pwsh`). Windows PowerShell 5.1 (`powershell`) usually works for most operations but examples use `pwsh`.
-- **Internet access**: Required to download PHP, Xdebug, Apache/Nginx, Composer and other packages.
+- **Internet access**: Required to download PHP, Xdebug, Imagick, Apache/Nginx, Composer and other packages.
 - **Download tool**: `curl` is used by the scripts for robust downloads (Windows 10+ includes `curl.exe`). If `curl` is not available, install it or ensure an equivalent download tool is present in PATH.
 - **Archive extraction**: The scripts use PowerShell's `Expand-Archive` to extract ZIP files; 7-Zip is not required.
 - **Windows Package Manager (winget)**: Optional — used only when importing the Visual C++ Redistributables via [source/winget-VCRedist.json](source/winget-VCRedist.json). If you don't have `winget`, install the appropriate Visual C++ Redistributables manually.
@@ -20,7 +20,7 @@ Requirements:
 
 Notes:
 - PHP binaries distributed here depend on the matching Visual C++ runtime for the MSVC toolset used to build that PHP release (e.g. "VS17" builds). Use the `winget` import above or manually install the correct Visual C++ Redistributable for your target PHP builds.
-- The update helper is at [Update-PHPVersions.ps1](Update-PHPVersions.ps1) and reads [source/baseUrl.json](source/baseUrl.json) to locate downloads on `windows.php.net` and `xdebug.org`.
+- The update helper is at [Update-PHPVersions.ps1](Update-PHPVersions.ps1) and reads [source/baseUrl.json](source/baseUrl.json) to locate downloads on `windows.php.net` (PHP and Imagick PECL releases) and `xdebug.org`.
 
 Quick checks:
 

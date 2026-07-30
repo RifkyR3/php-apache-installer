@@ -11,9 +11,9 @@
         "display_errors = On",
         "error_reporting = E_ALL & ~E_DEPRECATED & ~E_STRICT",
         "date.timezone = \"Asia/Jakarta\"",
-        "error_log = {PHP_INSTALL_DIR}php-errors_{VERSION}.log",
-        "upload_tmp_dir = {PHP_INSTALL_DIR}",
-        "tmpdir = {PHP_INSTALL_DIR}",
-        "sys_temp_dir = {PHP_INSTALL_DIR}"
+        "error_log = {PHP_INSTALL_DIR}tmp/php-errors_{VERSION}.log",
+        "upload_tmp_dir = {PHP_INSTALL_DIR}tmp/",
+        "tmpdir = {PHP_INSTALL_DIR}tmp/",
+        "sys_temp_dir = {PHP_INSTALL_DIR}tmp/"
     ]
 }

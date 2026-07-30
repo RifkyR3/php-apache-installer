@@ -8,6 +8,7 @@ $config = @{
     
     DownloadPhp        = Get-BoolFromEnv $env:DOWNLOAD_PHP
     InstallXdebug      = Get-BoolFromEnv $env:INSTALL_XDEBUG
+    InstallImagick     = Get-BoolFromEnv $env:INSTALL_IMAGICK
     PhpPathRegister    = Get-BoolFromEnv $env:REGISTER_PATH_PHP
     
     InstallComposer    = Get-BoolFromEnv $env:INSTALL_COMPOSER
@@ -60,6 +61,7 @@ Write-Output "PHP install path: $phpDir"
 Write-Output "PHP versions: $($whatToInstall -join ', ')"
 Write-Output "Download PHP packages: $($config.DownloadPhp)"
 Write-Output "Install Xdebug: $($config.InstallXdebug)"
+Write-Output "Install Imagick: $($config.InstallImagick)"
 Write-Output "Install Composer: $($config.InstallComposer)"
 Write-Output "Install Apache: $($config.InstallApache)"
 Write-Output "Download Apache packages: $($config.DownloadApache)"
@@ -78,6 +80,7 @@ $phpSourceVersions = Get-Content .\source\php-versions.json | ConvertFrom-Json
 $phpSourceConfigExtension = Get-Content .\source\php-config-extension.json | ConvertFrom-Json
 $phpSourceConfigBase = Get-Content .\source\php-config-base.json | ConvertFrom-Json
 $phpSourceConfigXdebug = Get-Content .\source\php-config-xdebug.json | ConvertFrom-Json
+$phpSourceConfigImagick = Get-Content .\source\php-config-imagick.json | ConvertFrom-Json
 
 # Set progress preference
 $ProgressPreference = 'SilentlyContinue'
@@ -151,6 +154,23 @@ foreach ($version in $whatToInstall) {
             exit 1
         }
     }
+
+    # Download Imagick if needed
+    if ($config.InstallImagick -and $phpData.imagick) {
+        $phpImagick = if ($typeToInstall -eq "NTS") { $phpData.imagick } else { $phpData.imagick.Replace("-nts", "") }
+        if ($phpImagick -match '^php_imagick-([^-]+)-') {
+            $imagickVer = $Matches[1]
+            $imagickUrl = "$($baseUrl.IMAGICK)$imagickVer/$phpImagick"
+            try {
+                Check-Download $imagickUrl $tmpDir $phpImagick
+            }
+            catch {
+                Write-Error "Failed to download Imagick $phpImagick`: $_"
+                Write-Error "Cancelling installation."
+                exit 1
+            }
+        }
+    }
 }
 
 # Process each PHP version
@@ -165,6 +185,12 @@ foreach ($version in $whatToInstall) {
         Remove-Item -Recurse -Force $phpDirExtract
     }
     New-Item -ItemType Directory -Path $phpDirExtract | Out-Null
+
+    # Ensure PHP tmp/log directory exists
+    $phpLogTmpDir = Join-Path $phpDir "tmp"
+    if (-not (Test-Path -Path $phpLogTmpDir)) {
+        New-Item -ItemType Directory -Path $phpLogTmpDir | Out-Null
+    }
 
     # Extract PHP
     Write-Output "Extracting $phpBaseFile to $phpDirExtract"
@@ -202,6 +228,31 @@ foreach ($version in $whatToInstall) {
         }
 
         (Get-Content $phpIni) -replace "php_xdebug.dll", $xdebugPath | Set-Content $phpIni
+    }
+
+    # Install Imagick if needed
+    if ($config.InstallImagick -and $phpData.imagick) {
+        $phpImagick = if ($typeToInstall -eq "NTS") { $phpData.imagick } else { $phpData.imagick.Replace("-nts", "") }
+        $imagickZip = Join-Path $tmpDir $phpImagick
+        $imagickTmpDir = Join-Path $tmpDir "imagick_$phpVersionDir"
+        if (Test-Path $imagickTmpDir) { Remove-Item -Recurse -Force $imagickTmpDir }
+        New-Item -ItemType Directory -Path $imagickTmpDir | Out-Null
+        Expand-Archive -Path $imagickZip -DestinationPath $imagickTmpDir
+
+        # Copy extension DLL
+        $extDll = Join-Path $imagickTmpDir "php_imagick.dll"
+        if (Test-Path $extDll) {
+            Copy-Item $extDll (Join-Path $phpDirExtract "ext\php_imagick.dll") -Force
+        }
+
+        # Copy dependency DLLs (CORE_RL_*.dll, IM_MOD_RL_*.dll, FILTER_*.dll, etc.) to PHP root dir
+        Get-ChildItem -Path $imagickTmpDir -Filter "*.dll" | Where-Object { $_.Name -ne "php_imagick.dll" } | ForEach-Object {
+            Copy-Item $_.FullName (Join-Path $phpDirExtract $_.Name) -Force
+        }
+
+        $phpSourceConfigImagick.$typeConfig | ForEach-Object {
+            Add-Content -Path $phpIni -Value $_
+        }
     }
 
     # Install Composer if needed

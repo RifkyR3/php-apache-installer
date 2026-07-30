@@ -5,6 +5,7 @@
     "PHP": "https://windows.php.net/downloads/releases/archives/",
     "PHP_RELEASE": "https://windows.php.net/downloads/releases/",
     "XDEBUG": "https://xdebug.org/files/",
+    "IMAGICK": "https://windows.php.net/downloads/pecl/releases/imagick/",
     "COMPOSER": "https://getcomposer.org/download/latest-stable/composer.phar",
     "COMPOSER_LTS": "https://getcomposer.org/download/latest-2.2.x/composer.phar"
 }

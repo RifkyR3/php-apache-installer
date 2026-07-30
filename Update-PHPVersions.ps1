@@ -130,6 +130,36 @@ function Get-LatestXdebugPackage {
         } -Descending | Select-Object -First 1
 }
 
+function Get-ImagickVersionFromFileName {
+    param([string]$FileName)
+    if ($FileName -match '^php_imagick-(\d+\.\d+\.\d+)') {
+        return [version]$Matches[1]
+    }
+    return $null
+}
+
+function Get-LatestImagickPackage {
+    param(
+        [string[]]$Files,
+        [string]$PhpMajorMinor,
+        [string]$Type
+    )
+
+    $pattern = "^php_imagick-(\d+\.\d+\.\d+.*?)-$PhpMajorMinor-.*-$Type-.*\.zip$"
+    $candidates = $Files | Where-Object { $_ -match $pattern }
+    if (-not $candidates) { return $null }
+
+    if ($Prefer64) {
+        $candidates64 = $candidates | Where-Object { $_ -match 'x86_64|x64' }
+        if ($candidates64 -and $candidates64.Count -gt 0) { $candidates = $candidates64 }
+    }
+
+    return $candidates | Sort-Object {
+        $v = Get-ImagickVersionFromFileName $_
+        if ($null -eq $v) { [version]'0.0.0' } else { $v }
+    } -Descending | Select-Object -First 1
+}
+
 function Resolve-RelativePath {
     param(
         [string]$Path
@@ -160,6 +190,18 @@ $phpArchiveFiles = Get-RemoteDirectoryFiles $baseUrl.PHP
 $phpReleaseFiles = Get-RemoteDirectoryFiles $baseUrl.PHP_RELEASE
 $xdebugFiles = Get-RemoteDirectoryFiles 'https://xdebug.org/download'
 
+# PECL Imagick download listing
+$imagickBaseUrl = if ($baseUrl.IMAGICK) { $baseUrl.IMAGICK } else { 'https://windows.php.net/downloads/pecl/releases/imagick/' }
+$imagickDirs = Get-RemoteDirectoryFiles $imagickBaseUrl | Where-Object { $_ -match '^\d+\.\d+' }
+$imagickFiles = @()
+foreach ($vDir in $imagickDirs) {
+    try {
+        $subFiles = Get-RemoteDirectoryFiles "$imagickBaseUrl$vDir" | Where-Object { $_ -match '\.zip$' }
+        $imagickFiles += $subFiles
+    }
+    catch {}
+}
+
 # Apache Lounge download listing (for APACHE_BASE)
 $apacheFiles = Get-RemoteDirectoryFiles 'https://www.apachelounge.com/download/'
 
@@ -183,6 +225,7 @@ foreach ($versionKey in $phpVersions.PSObject.Properties.Name) {
     $latestPhpName = Get-LatestPhpPackage -Files $searchFiles -PhpMajorMinor $phpMajorMinor -Type $type
 
     $latestXdebugName = Get-LatestXdebugPackage -Files $xdebugFiles -PhpMajorMinor $phpMajorMinor
+    $latestImagickName = Get-LatestImagickPackage -Files $imagickFiles -PhpMajorMinor $phpMajorMinor -Type $type
 
     if ($latestPhpName -and $latestPhpName -ne $currentPhpName) {
         $changes += [pscustomobject]@{
@@ -205,6 +248,18 @@ foreach ($versionKey in $phpVersions.PSObject.Properties.Name) {
         }
         if ($Update) {
             $phpVersions.$versionKey.xdebug = $latestXdebugName
+        }
+    }
+
+    if ($latestImagickName -and $entry.imagick -ne $latestImagickName) {
+        $changes += [pscustomobject]@{
+            Key = $versionKey
+            Field = 'imagick'
+            Current = $entry.imagick
+            Latest = $latestImagickName
+        }
+        if ($Update) {
+            $phpVersions.$versionKey.imagick = $latestImagickName
         }
     }
 }
