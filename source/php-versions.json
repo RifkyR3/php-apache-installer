@@ -87,7 +87,7 @@
     "download": "release"
   },
   "v8.4": {
-    "name": "php-8.4.24-nts-Win32-vs17-x64.zip",
+    "name": "php-8.4.25-nts-Win32-vs17-x64.zip",
     "xdebug": "php_xdebug-3.5.3-8.4-nts-vs17-x86_64.dll",
     "imagick": "php_imagick-3.8.1-8.4-nts-vs17-x64.zip",
     "alias": "84",
@@ -95,7 +95,7 @@
     "download": "release"
   },
   "v8.5": {
-    "name": "php-8.5.9-nts-Win32-vs17-x64.zip",
+    "name": "php-8.5.10-nts-Win32-vs17-x64.zip",
     "xdebug": "php_xdebug-3.5.3-8.5-nts-vs17-x86_64.dll",
     "imagick": "php_imagick-3.8.1-8.5-nts-vs17-x64.zip",
     "alias": "85",
