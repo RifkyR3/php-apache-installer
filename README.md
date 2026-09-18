@@ -120,3 +120,23 @@ Notes:
 - When run with `-Update` the script will update `APACHE_BASE` inside the specified env sample file (default: `.\.env.sample`) and will also update `../.env` if that file exists.
 - By default the script prefers x64 (x86_64) binaries when available. Use `-Prefer64:$false` to disable.
 - This script is a convenience/reference tool; review changes before committing.
+
+## Portable Control Panel (XAMPP-Style)
+
+Manage Apache and PHP portably without administrative privileges or Windows services:
+
+- **Quick Launch**: Double-click `control.bat` or run:
+  ```powershell
+  pwsh -NoProfile .\control.ps1
+  ```
+- **CLI Commands**:
+  - `.\control.ps1 start` : Start Apache web server in user-space.
+  - `.\control.ps1 stop` : Stop Apache web server.
+  - `.\control.ps1 restart` : Restart Apache web server.
+  - `.\control.ps1 status` : Check running status and active PIDs.
+  - `.\control.ps1 open` : Open browser to default dashboard (`http://localhost:8082`).
+  - `.\control.ps1 htdocs` : Open `apache/htdocs` folder in Windows Explorer.
+  - `.\control.ps1 shell [version]` : Launch isolated shell with PHP (default 8.2) and Composer in PATH.
+  - `.\control.ps1 sync` : Synchronize paths from `.env` (or defaults) to Apache config.
+  - `.\control.ps1 gui` : Open native Windows Forms GUI control panel.
+

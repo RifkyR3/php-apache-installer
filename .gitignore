@@ -9,5 +9,9 @@
 !source/*
 !source/*/*
 !source/*/*/*
+!www/
+!www/*
 !.env.sample
 !Update-PHPVersions.ps1
+!control.ps1
+!control.bat
