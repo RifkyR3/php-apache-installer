@@ -389,13 +389,20 @@ function Download-InstallerPackages {
 
     # Download Nginx package if enabled
     if ($Config.Flags.InstallNginx) {
-        $nginxUrl = "$($baseUrl.NGINX)/$($Config.NginxBase)"
-        if ($Config.Flags.DownloadNginx) {
-            Write-Output "Downloading Nginx"
-            Download-File $nginxUrl (Join-Path $tmpDir $Config.NginxBase)
+        $nginxBaseFile = $Config.NginxBase
+        $nginxUrl = if ($baseUrl.NGINX -match 'github\.com/nginx/nginx/releases/download') {
+            $tag = if ($nginxBaseFile -match '^nginx-(\d+\.\d+\.\d+)\.zip$') { "release-$($Matches[1])" } else { "release-1.30.5" }
+            "$($baseUrl.NGINX.TrimEnd('/'))/$tag/$nginxBaseFile"
+        } else {
+            "$($baseUrl.NGINX.TrimEnd('/'))/$nginxBaseFile"
         }
-        else {
-            Check-Download $nginxUrl $tmpDir $Config.NginxBase
+
+        try {
+            Save-PackageFile -Url $nginxUrl -TargetDir $tmpDir -FileName $nginxBaseFile -ForceDownload $Config.Flags.DownloadNginx
+        }
+        catch {
+            Write-Error "Failed to download Nginx $nginxBaseFile`: $_"
+            throw "Installation halted due to failed Nginx download: $nginxBaseFile"
         }
     }
 }

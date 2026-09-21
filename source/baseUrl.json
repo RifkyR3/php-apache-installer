@@ -1,13 +1,13 @@
 {
-    "NGINX": "http://nginx.org/download/",
-    "NGINX_BASE": "nginx-1.28.0.zip",
-    "APACHE": "https://www.apachelounge.com/download/VS18/binaries",
-    "APACHE_BASE": "httpd-2.4.68-260920-Win64-VS18.zip",
-    "APACHE_FCGI": "https://www.apachelounge.com/download/VS18/modules/mod_fcgid-2.3.10-win64-VS18.zip",
-    "PHP": "https://windows.php.net/downloads/releases/archives/",
-    "PHP_RELEASE": "https://windows.php.net/downloads/releases/",
-    "XDEBUG": "https://xdebug.org/files/",
-    "IMAGICK": "https://windows.php.net/downloads/pecl/releases/imagick/",
-    "COMPOSER": "https://getcomposer.org/download/latest-stable/composer.phar",
-    "COMPOSER_LTS": "https://getcomposer.org/download/latest-2.2.x/composer.phar"
+  "NGINX": "https://github.com/nginx/nginx/releases/download/",
+  "NGINX_BASE": "nginx-1.30.5.zip",
+  "APACHE": "https://www.apachelounge.com/download/VS18/binaries",
+  "APACHE_BASE": "httpd-2.4.68-260920-Win64-VS18.zip",
+  "APACHE_FCGI": "https://www.apachelounge.com/download/VS18/modules/mod_fcgid-2.3.10-win64-VS18.zip",
+  "PHP": "https://windows.php.net/downloads/releases/archives/",
+  "PHP_RELEASE": "https://windows.php.net/downloads/releases/",
+  "XDEBUG": "https://xdebug.org/files/",
+  "IMAGICK": "https://windows.php.net/downloads/pecl/releases/imagick/",
+  "COMPOSER": "https://getcomposer.org/download/latest-stable/composer.phar",
+  "COMPOSER_LTS": "https://getcomposer.org/download/latest-2.2.x/composer.phar"
 }

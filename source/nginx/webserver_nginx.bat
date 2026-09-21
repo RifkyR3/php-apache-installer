@@ -48,6 +48,12 @@ tasklist /FI "IMAGENAME eq php-cgi.exe" | find /i "php-cgi.exe" > nul
 if %ERRORLEVEL% equ 0 (
     echo [INFO] PHP processes are already running!
 ) else (
+    if exist "{{PHP_DIR}}\85\" (
+        echo [STARTING] PHP 8.5 on port 9185...
+        start "PHP 8.5" /D "{{PHP_DIR}}\85" "{{PHP_DIR}}\85\php-cgi.exe" -b 127.0.0.1:9185 -c "{{PHP_DIR}}\85\php.ini"
+        echo Nginx running on: Port 8085 with PHP 8.5
+    )
+
     if exist "{{PHP_DIR}}\84\" (
         echo [STARTING] PHP 8.4 on port 9184...
         start "PHP 8.4" /D "{{PHP_DIR}}\84" "{{PHP_DIR}}\84\php-cgi.exe" -b 127.0.0.1:9184 -c "{{PHP_DIR}}\84\php.ini"
@@ -98,34 +104,33 @@ if %ERRORLEVEL% equ 0 (
     
     if exist "{{PHP_DIR}}\71\" (
         echo [STARTING] PHP 7.1 on port 9171...
-        start "PHP 7.1" /D "{{PHP_DIR}}\71" "{{PHP_DIR}}\71\php-cgi.exe" -b 117.0.0.1:9171 -c "{{PHP_DIR}}\71\php.ini"
+        start "PHP 7.1" /D "{{PHP_DIR}}\71" "{{PHP_DIR}}\71\php-cgi.exe" -b 127.0.0.1:9171 -c "{{PHP_DIR}}\71\php.ini"
         echo Nginx running on: Port 8071 with PHP 7.1
     )
     
     if exist "{{PHP_DIR}}\70\" (
         echo [STARTING] PHP 7.0 on port 9170...
-        start "PHP 7.0" /D "{{PHP_DIR}}\70" "{{PHP_DIR}}\70\php-cgi.exe" -b 117.0.0.1:9170 -c "{{PHP_DIR}}\70\php.ini"
+        start "PHP 7.0" /D "{{PHP_DIR}}\70" "{{PHP_DIR}}\70\php-cgi.exe" -b 127.0.0.1:9170 -c "{{PHP_DIR}}\70\php.ini"
         echo Nginx running on: Port 8070 with PHP 7.0
     )
     
     if exist "{{PHP_DIR}}\56\" (
         echo [STARTING] PHP 5.6 on port 9156...
-        start "PHP 5.6" /D "{{PHP_DIR}}\56" "{{PHP_DIR}}\56\php-cgi.exe" -b 117.0.0.1:9156 -c "{{PHP_DIR}}\56\php.ini"
+        start "PHP 5.6" /D "{{PHP_DIR}}\56" "{{PHP_DIR}}\56\php-cgi.exe" -b 127.0.0.1:9156 -c "{{PHP_DIR}}\56\php.ini"
         echo Nginx running on: Port 8056 with PHP 5.6
     )
     
     if exist "{{PHP_DIR}}\55\" (
         echo [STARTING] PHP 5.5 on port 9155...
-        start "PHP 5.5" /D "{{PHP_DIR}}\55" "{{PHP_DIR}}\55\php-cgi.exe" -b 117.0.0.1:9155 -c "{{PHP_DIR}}\55\php.ini"
+        start "PHP 5.5" /D "{{PHP_DIR}}\55" "{{PHP_DIR}}\55\php-cgi.exe" -b 127.0.0.1:9155 -c "{{PHP_DIR}}\55\php.ini"
         echo Nginx running on: Port 8055 with PHP 5.5
     )
     
     if exist "{{PHP_DIR}}\54\" (
         echo [STARTING] PHP 5.4 on port 9154...
-        start "PHP 5.4" /D "{{PHP_DIR}}\54" "{{PHP_DIR}}\54\php-cgi.exe" -b 117.0.0.1:9154 -c "{{PHP_DIR}}\54\php.ini"
+        start "PHP 5.4" /D "{{PHP_DIR}}\54" "{{PHP_DIR}}\54\php-cgi.exe" -b 127.0.0.1:9154 -c "{{PHP_DIR}}\54\php.ini"
         echo Nginx running on: Port 8054 with PHP 5.4
     )
-    
 )
 
 pause
