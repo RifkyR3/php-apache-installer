@@ -1,429 +1,826 @@
-# Load dependencies
-. .\01Include.ps1
-. .\02Function.ps1
+#Requires -Version 5.1
+<#
+.SYNOPSIS
+    Automated installer and configurator for PHP, Apache, Nginx, Composer, Xdebug, and Imagick on Windows.
 
-# Configuration parameters with default values
-$config = @{
-    InstallVCRedist    = Get-BoolFromEnv $env:INSTALL_VCREDIST
-    
-    DownloadPhp        = Get-BoolFromEnv $env:DOWNLOAD_PHP
-    InstallXdebug      = Get-BoolFromEnv $env:INSTALL_XDEBUG
-    InstallImagick     = Get-BoolFromEnv $env:INSTALL_IMAGICK
-    PhpPathRegister    = Get-BoolFromEnv $env:REGISTER_PATH_PHP
-    
-    InstallComposer    = Get-BoolFromEnv $env:INSTALL_COMPOSER
-    
-    InstallApache      = Get-BoolFromEnv $env:INSTALL_APACHE
-    DownloadApache     = Get-BoolFromEnv $env:DOWNLOAD_APACHE
-    ApachePathRegister = Get-BoolFromEnv $env:REGISTER_PATH_APACHE
-    
-    InstallNginx       = Get-BoolFromEnv $env:INSTALL_NGINX
-    DownloadNginx      = Get-BoolFromEnv $env:DOWNLOAD_NGINX
-    NginxPathRegister  = Get-BoolFromEnv $env:REGISTER_PATH_NGINX
-    
-    CleanTmpDir        = Get-BoolFromEnv $env:CLEAN_TMP_DIR
-}
+.DESCRIPTION
+    Orchestrates the download, extraction, configuration, and path registration of multiple PHP versions
+    alongside Apache HTTPD and/or Nginx web servers. Configuration is primarily loaded from .env and source JSON
+    manifests, with optional command-line parameter overrides.
 
-# Version and type configurations
-$basePhpVersions = "v5.4, v5.5, v5.6, v7.0, v7.1, v7.2, v7.3, v7.4, v8.0, v8.1, v8.2, v8.3, v8.4, v8.5"
-$whatToInstall = if ([string]::IsNullOrWhiteSpace($env:INSTALL_PHP_VERSION)) { 
-    $basePhpVersions 
-}
-else { 
-    $env:INSTALL_PHP_VERSION 
-}
-$whatToInstall = $whatToInstall.Replace('"', '').Replace("'", "").Split(",").Trim()
-$typeToInstall = "NTS"  # or "TS" for thread-safe version
+.EXAMPLE
+    pwsh -NoProfile .\install.ps1
 
-# Directory configurations
-$installDir = Path-Cleaning $PWD $env:INSTALL_DIR
-$apacheDir = Join-Path $installDir "apache"
-$nginxDir = Join-Path $installDir "nginx"
-$phpDir = Join-Path $installDir "PHP"
-$phpBaseConfig = "php.ini-development"
-$htdocs = Path-Cleaning (Join-Path $apacheDir "htdocs") $env:HTDOCS_DIR
+.EXAMPLE
+    pwsh -NoProfile .\install.ps1 -PhpVersions "v8.2, v8.5" -InstallApache:$false
+#>
 
-# Initialize paths and temp directory
-$pathName = "WEBSERV"
-$registerPath = @()
-$tmpDir = Join-Path $PWD "tmp/"
+[CmdletBinding(SupportsShouldProcess = $true)]
+param(
+    [string]$PhpVersions,
+    [string]$InstallDir,
+    [string]$HtdocsDir,
+    [string]$BuildType,
+    [string]$ApacheBase,
+    [string]$NginxBase,
+    [Nullable[bool]]$InstallVCRedist,
+    [Nullable[bool]]$DownloadPhp,
+    [Nullable[bool]]$InstallXdebug,
+    [Nullable[bool]]$InstallImagick,
+    [Nullable[bool]]$InstallComposer,
+    [Nullable[bool]]$InstallApache,
+    [Nullable[bool]]$DownloadApache,
+    [Nullable[bool]]$InstallNginx,
+    [Nullable[bool]]$DownloadNginx,
+    [Nullable[bool]]$RegisterPhpPath,
+    [Nullable[bool]]$RegisterApachePath,
+    [Nullable[bool]]$RegisterNginxPath,
+    [Nullable[bool]]$CleanTmpDir
+)
 
-if (-not (Test-Path -Path $tmpDir)) {
-    New-Item -ItemType Directory -Path $tmpDir | Out-Null
-    Write-Output "Created TMP directory: $tmpDir"
-}
-
-Write-Output "=== php-apache-installer configuration ==="
-Write-Output "Install root: $installDir"
-Write-Output "Apache install path: $apacheDir"
-Write-Output "Nginx install path: $nginxDir"
-Write-Output "PHP install path: $phpDir"
-Write-Output "PHP versions: $($whatToInstall -join ', ')"
-Write-Output "Download PHP packages: $($config.DownloadPhp)"
-Write-Output "Install Xdebug: $($config.InstallXdebug)"
-Write-Output "Install Imagick: $($config.InstallImagick)"
-Write-Output "Install Composer: $($config.InstallComposer)"
-Write-Output "Install Apache: $($config.InstallApache)"
-Write-Output "Download Apache packages: $($config.DownloadApache)"
-Write-Output "Register Apache path: $($config.ApachePathRegister)"
-Write-Output "Install Nginx: $($config.InstallNginx)"
-Write-Output "Download Nginx packages: $($config.DownloadNginx)"
-Write-Output "Register Nginx path: $($config.NginxPathRegister)"
-Write-Output "Register PHP path: $($config.PhpPathRegister)"
-Write-Output "Install VC Redist: $($config.InstallVCRedist)"
-Write-Output "Clean temp directory after run: $($config.CleanTmpDir)"
-Write-Output "=== start installation ==="
-
-# Load configuration files
-$baseUrl = Get-Content .\source\baseUrl.json | ConvertFrom-Json
-$phpSourceVersions = Get-Content .\source\php-versions.json | ConvertFrom-Json
-$phpSourceConfigExtension = Get-Content .\source\php-config-extension.json | ConvertFrom-Json
-$phpSourceConfigBase = Get-Content .\source\php-config-base.json | ConvertFrom-Json
-$phpSourceConfigXdebug = Get-Content .\source\php-config-xdebug.json | ConvertFrom-Json
-$phpSourceConfigImagick = Get-Content .\source\php-config-imagick.json | ConvertFrom-Json
-
-# Set progress preference
+$ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
-# Install VCRedist if needed
-if ($config.InstallVCRedist) {
-    Write-Output "Installing all VCRedist packages"
-    winget import -i .\source\winget-VCRedist.json --accept-package-agreements --accept-source-agreements --disable-interactivity
+# --- 1. Dependencies & Helpers ---
+
+$ScriptRoot = $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($ScriptRoot)) {
+    $ScriptRoot = (Get-Location).Path
 }
 
-# Composer configuration
-$composerConfig = @{
-    Main           = "composer.phar"
-    Lts            = "composer-lts.phar"
-    MinimumVersion = 72
-    MainPath       = Join-Path $tmpDir "composer.phar"
-    LtsPath        = Join-Path $tmpDir "composer-lts.phar"
-}
+. (Join-Path $ScriptRoot "01Include.ps1")
+. (Join-Path $ScriptRoot "02Function.ps1")
 
-if ($config.InstallComposer) {
-    Check-Download $baseUrl.COMPOSER $tmpDir $composerConfig.Main
-    Check-Download $baseUrl.COMPOSER_LTS $tmpDir $composerConfig.Lts
-}
+function Resolve-AppPath {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$BaseDir,
+        [string]$InputPath,
+        [string]$DefaultPath
+    )
 
-# PHP Installation
-foreach ($version in $whatToInstall) {
-    $phpData = $phpSourceVersions.$version
-        
-    # Download PHP
-    $phpBaseFile = if ($typeToInstall -eq "NTS") { $phpData.name } else { $phpData.name.Replace("-nts", "") }
-    $url = if ($phpData.download -eq "release") { 
-        "$($baseUrl.PHP_RELEASE)$phpBaseFile" 
+    if ([string]::IsNullOrWhiteSpace($InputPath)) {
+        return $DefaultPath
     }
-    else { 
-        "$($baseUrl.PHP)$phpBaseFile" 
+
+    $trimmed = $InputPath.Replace('/', '\').Trim()
+    if ($trimmed -eq '.' -or $trimmed -eq '.\') {
+        return $BaseDir
     }
-        
-    if ($config.DownloadPhp) {
-        Write-Output "Downloading $phpBaseFile to $tmpDir"
+
+    if ([System.IO.Path]::IsPathRooted($trimmed)) {
+        return [System.IO.Path]::GetFullPath($trimmed)
+    }
+
+    return [System.IO.Path]::GetFullPath((Join-Path $BaseDir $trimmed))
+}
+
+function Get-ObjectProperty {
+    [CmdletBinding()]
+    param(
+        $Object,
+        [string]$PropertyName
+    )
+
+    if ($null -eq $Object) { return $null }
+    $prop = $Object.PSObject.Properties[$PropertyName]
+    if ($null -ne $prop) { return $prop.Value }
+    return $null
+}
+
+function Get-InstallerConfig {
+    [CmdletBinding()]
+    param(
+        [hashtable]$CliParams,
+        [string]$RootDirectory,
+        [PSCustomObject]$Manifests = $null
+    )
+
+    function Resolve-BooleanOption {
+        param([string]$ParamName, [string]$EnvVarName, [bool]$Default = $false)
+        if ($CliParams.ContainsKey($ParamName) -and $null -ne $CliParams[$ParamName]) {
+            return [bool]$CliParams[$ParamName]
+        }
+        $envVal = [System.Environment]::GetEnvironmentVariable($EnvVarName)
+        return Get-BoolFromEnv $envVal $Default
+    }
+
+    function Resolve-StringOption {
+        param([string]$ParamName, [string]$EnvVarName, [string]$Default = '')
+        if ($CliParams.ContainsKey($ParamName) -and -not [string]::IsNullOrWhiteSpace($CliParams[$ParamName])) {
+            return [string]$CliParams[$ParamName]
+        }
+        $envVal = [System.Environment]::GetEnvironmentVariable($EnvVarName)
+        if (-not [string]::IsNullOrWhiteSpace($envVal)) {
+            return $envVal
+        }
+        return $Default
+    }
+
+    $flags = [PSCustomObject]@{
+        InstallVCRedist    = Resolve-BooleanOption 'InstallVCRedist'    'INSTALL_VCREDIST'    $true
+        DownloadPhp        = Resolve-BooleanOption 'DownloadPhp'        'DOWNLOAD_PHP'        $true
+        InstallXdebug      = Resolve-BooleanOption 'InstallXdebug'      'INSTALL_XDEBUG'      $true
+        InstallImagick     = Resolve-BooleanOption 'InstallImagick'     'INSTALL_IMAGICK'     $true
+        RegisterPhpPath    = Resolve-BooleanOption 'RegisterPhpPath'    'REGISTER_PATH_PHP'   $false
+        InstallComposer    = Resolve-BooleanOption 'InstallComposer'    'INSTALL_COMPOSER'    $true
+        InstallApache      = Resolve-BooleanOption 'InstallApache'      'INSTALL_APACHE'      $true
+        DownloadApache     = Resolve-BooleanOption 'DownloadApache'     'DOWNLOAD_APACHE'     $true
+        RegisterApachePath = Resolve-BooleanOption 'RegisterApachePath' 'REGISTER_PATH_APACHE' $false
+        InstallNginx       = Resolve-BooleanOption 'InstallNginx'       'INSTALL_NGINX'       $false
+        DownloadNginx      = Resolve-BooleanOption 'DownloadNginx'      'DOWNLOAD_NGINX'      $false
+        RegisterNginxPath  = Resolve-BooleanOption 'RegisterNginxPath'  'REGISTER_PATH_NGINX'  $false
+        CleanTmpDir        = Resolve-BooleanOption 'CleanTmpDir'        'CLEAN_TMP_DIR'       $false
+    }
+
+    $rawInstallDir = Resolve-StringOption 'InstallDir' 'INSTALL_DIR' $RootDirectory
+    $installRoot = Resolve-AppPath -BaseDir $RootDirectory -InputPath $rawInstallDir -DefaultPath $RootDirectory
+
+    $apacheDir = Join-Path $installRoot "apache"
+    $nginxDir = Join-Path $installRoot "nginx"
+    $phpDir = Join-Path $installRoot "PHP"
+
+    $rawHtdocs = Resolve-StringOption 'HtdocsDir' 'HTDOCS_DIR' ''
+    $defaultHtdocs = Join-Path $apacheDir "htdocs"
+    $htdocsDir = Resolve-AppPath -BaseDir $installRoot -InputPath $rawHtdocs -DefaultPath $defaultHtdocs
+
+    $defaultPhpVersions = "v5.4, v5.5, v5.6, v7.0, v7.1, v7.2, v7.3, v7.4, v8.0, v8.1, v8.2, v8.3, v8.4, v8.5"
+    $rawVersions = Resolve-StringOption 'PhpVersions' 'INSTALL_PHP_VERSION' $defaultPhpVersions
+    $versionList = @(
+        $rawVersions.Replace('"', '').Replace("'", "").Split(',') |
+            ForEach-Object { $_.Trim() } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    )
+
+    $buildType = Resolve-StringOption 'BuildType' 'PHP_BUILD_TYPE' 'NTS'
+
+    $manifestApacheBase = if ($Manifests -and (Get-ObjectProperty $Manifests.BaseUrl "APACHE_BASE")) {
+        Get-ObjectProperty $Manifests.BaseUrl "APACHE_BASE"
+    } else {
+        "httpd-2.4.68-260920-Win64-VS18.zip"
+    }
+
+    $manifestNginxBase = if ($Manifests -and (Get-ObjectProperty $Manifests.BaseUrl "NGINX_BASE")) {
+        Get-ObjectProperty $Manifests.BaseUrl "NGINX_BASE"
+    } else {
+        "nginx-1.28.0.zip"
+    }
+
+    # ApacheBase and NginxBase are now configured via source/baseUrl.json (or overridden explicitly via CLI parameter)
+    $apacheBase = if ($CliParams.ContainsKey('ApacheBase') -and -not [string]::IsNullOrWhiteSpace($CliParams['ApacheBase'])) {
+        [string]$CliParams['ApacheBase']
+    } else {
+        $manifestApacheBase
+    }
+
+    $nginxBase = if ($CliParams.ContainsKey('NginxBase') -and -not [string]::IsNullOrWhiteSpace($CliParams['NginxBase'])) {
+        [string]$CliParams['NginxBase']
+    } else {
+        $manifestNginxBase
+    }
+
+    $tmpDir = Join-Path $RootDirectory "tmp"
+    if (-not (Test-Path -LiteralPath $tmpDir)) {
+        New-Item -ItemType Directory -Path $tmpDir | Out-Null
+        Write-Output "Created TMP directory: $tmpDir"
+    }
+
+    return [PSCustomObject]@{
+        Flags        = $flags
+        InstallDir   = $installRoot
+        ApacheDir    = $apacheDir
+        NginxDir     = $nginxDir
+        PhpDir       = $phpDir
+        HtdocsDir    = $htdocsDir
+        TmpDir       = $tmpDir
+        Versions     = $versionList
+        BuildType    = $buildType
+        ApacheBase   = $apacheBase
+        NginxBase    = $nginxBase
+        PathEnvName  = "WEBSERV"
+    }
+}
+
+function Get-SourceManifests {
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][string]$SourceDir)
+
+    function Load-JsonFile([string]$FileName) {
+        $filePath = Join-Path $SourceDir $FileName
+        if (-not (Test-Path -LiteralPath $filePath)) {
+            throw "Required manifest file not found: $filePath"
+        }
+        return Get-Content -LiteralPath $filePath -Raw | ConvertFrom-Json
+    }
+
+    return [PSCustomObject]@{
+        BaseUrl     = Load-JsonFile "baseUrl.json"
+        PhpVersions = Load-JsonFile "php-versions.json"
+        Extensions  = Load-JsonFile "php-config-extension.json"
+        BaseConfig  = Load-JsonFile "php-config-base.json"
+        Xdebug      = Load-JsonFile "php-config-xdebug.json"
+        Imagick     = Load-JsonFile "php-config-imagick.json"
+    }
+}
+
+function Save-PackageFile {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$Url,
+        [Parameter(Mandatory = $true)][string]$TargetDir,
+        [Parameter(Mandatory = $true)][string]$FileName,
+        [bool]$ForceDownload = $false
+    )
+
+    $targetPath = Join-Path $TargetDir $FileName
+    if ($ForceDownload) {
+        Write-Output "Downloading $FileName to $TargetDir"
+        Download-File $Url $targetPath
+    }
+    else {
+        Check-Download $Url $TargetDir $FileName
+    }
+
+    if (-not (Test-Path -LiteralPath $targetPath)) {
+        throw "Failed to obtain file: $targetPath"
+    }
+
+    # Validate zip integrity if the downloaded file is an archive
+    if ($FileName.EndsWith('.zip', [System.StringComparison]::OrdinalIgnoreCase)) {
         try {
-            Download-File $url (Join-Path $tmpDir $phpBaseFile)
+            $zipArchive = [System.IO.Compression.ZipFile]::OpenRead($targetPath)
+            $null = $zipArchive.Entries
+            $zipArchive.Dispose()
+        }
+        catch {
+            Remove-Item -LiteralPath $targetPath -Force -ErrorAction SilentlyContinue
+            throw "Downloaded file $FileName is not a valid zip archive (server may have returned an HTML error page or corrupted content): $Url"
+        }
+    }
+}
+
+function Show-InstallerBanner {
+    [CmdletBinding()]
+    param([PSCustomObject]$Config)
+
+    Write-Output "=== php-apache-installer configuration ==="
+    Write-Output "Install root: $($Config.InstallDir)"
+    Write-Output "Apache install path: $($Config.ApacheDir)"
+    Write-Output "Nginx install path: $($Config.NginxDir)"
+    Write-Output "PHP install path: $($Config.PhpDir)"
+    Write-Output "PHP versions: $($Config.Versions -join ', ')"
+    Write-Output "Download PHP packages: $($Config.Flags.DownloadPhp)"
+    Write-Output "Install Xdebug: $($Config.Flags.InstallXdebug)"
+    Write-Output "Install Imagick: $($Config.Flags.InstallImagick)"
+    Write-Output "Install Composer: $($Config.Flags.InstallComposer)"
+    Write-Output "Install Apache: $($Config.Flags.InstallApache)"
+    Write-Output "Download Apache packages: $($Config.Flags.DownloadApache)"
+    Write-Output "Register Apache path: $($Config.Flags.RegisterApachePath)"
+    Write-Output "Install Nginx: $($Config.Flags.InstallNginx)"
+    Write-Output "Download Nginx packages: $($Config.Flags.DownloadNginx)"
+    Write-Output "Register Nginx path: $($Config.Flags.RegisterNginxPath)"
+    Write-Output "Register PHP path: $($Config.Flags.RegisterPhpPath)"
+    Write-Output "Install VC Redist: $($Config.Flags.InstallVCRedist)"
+    Write-Output "Clean temp directory after run: $($Config.Flags.CleanTmpDir)"
+    Write-Output "=== start installation ==="
+}
+
+# --- 2. Phase Implementations ---
+
+function Invoke-VCRedistInstall {
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    param([Parameter(Mandatory = $true)][string]$ManifestPath)
+
+    if (-not (Test-Path -LiteralPath $ManifestPath)) {
+        Write-Warning "VC Redist manifest not found at: $ManifestPath"
+        return
+    }
+
+    Write-Output "Installing all VCRedist packages"
+    if ($PSCmdlet.ShouldProcess("Visual C++ Redistributables", "Install via winget")) {
+        winget import -i $ManifestPath --accept-package-agreements --accept-source-agreements --disable-interactivity
+    }
+}
+
+function Download-InstallerPackages {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][PSCustomObject]$Config,
+        [Parameter(Mandatory = $true)][PSCustomObject]$Manifests
+    )
+
+    $baseUrl = $Manifests.BaseUrl
+    $tmpDir = $Config.TmpDir
+
+    # Download Composer packages if enabled
+    if ($Config.Flags.InstallComposer) {
+        Save-PackageFile -Url $baseUrl.COMPOSER -TargetDir $tmpDir -FileName "composer.phar" -ForceDownload $false
+        Save-PackageFile -Url $baseUrl.COMPOSER_LTS -TargetDir $tmpDir -FileName "composer-lts.phar" -ForceDownload $false
+    }
+
+    # Download PHP and extension packages
+    foreach ($version in $Config.Versions) {
+        $phpData = Get-ObjectProperty $Manifests.PhpVersions $version
+        if ($null -eq $phpData) {
+            Write-Warning "Version '$version' not found in php-versions.json manifest; skipping."
+            continue
+        }
+
+        # Resolve PHP package properties
+        $phpName     = Get-ObjectProperty $phpData "name"
+        $phpDownload = Get-ObjectProperty $phpData "download"
+        $phpBaseFile = if ($Config.BuildType -eq "NTS") { $phpName } else { $phpName.Replace("-nts", "") }
+        $phpUrl = if ($phpDownload -eq "release") {
+            "$($baseUrl.PHP_RELEASE)$phpBaseFile"
+        } else {
+            "$($baseUrl.PHP)$phpBaseFile"
+        }
+
+        try {
+            Save-PackageFile -Url $phpUrl -TargetDir $tmpDir -FileName $phpBaseFile -ForceDownload $Config.Flags.DownloadPhp
         }
         catch {
             Write-Error "Failed to download PHP $version`: $_"
-            Write-Error "Cancelling installation due to failed download."
-            exit 1  # Stops the entire script with error code
+            throw "Installation halted due to failed PHP download: $version"
         }
-    }
-    else {
-        try {
-            Check-Download $url $tmpDir $phpBaseFile
-        }
-        catch {
-            Write-Error "Failed to download or verify $phpBaseFile`: $_"
-            Write-Error "Cancelling installation."
-            exit 1
-        }
-    }
 
-    # Download Xdebug if needed
-    if ($config.InstallXdebug) {
-        $phpXdebug = if ($typeToInstall -eq "NTS") { $phpData.xdebug } else { $phpData.xdebug.Replace("-nts", "") }
-        $xdebugUrl = "$($baseUrl.XDEBUG)$phpXdebug"
-
-        try {
-            Check-Download $xdebugUrl $tmpDir $phpXdebug
-        }
-        catch {
-            Write-Error "Failed to download Xdebug $phpXdebug`: $_"
-            Write-Error "Cancelling installation."
-            exit 1
-        }
-    }
-
-    # Download Imagick if needed
-    if ($config.InstallImagick -and $phpData.imagick) {
-        $phpImagick = if ($typeToInstall -eq "NTS") { $phpData.imagick } else { $phpData.imagick.Replace("-nts", "") }
-        if ($phpImagick -match '^php_imagick-([^-]+)-') {
-            $imagickVer = $Matches[1]
-            $imagickUrl = "$($baseUrl.IMAGICK)$imagickVer/$phpImagick"
+        # Download Xdebug if enabled
+        $xdebugProp = Get-ObjectProperty $phpData "xdebug"
+        if ($Config.Flags.InstallXdebug -and -not [string]::IsNullOrWhiteSpace($xdebugProp)) {
+            $xdebugFile = if ($Config.BuildType -eq "NTS") { $xdebugProp } else { $xdebugProp.Replace("-nts", "") }
+            $xdebugUrl = "$($baseUrl.XDEBUG)$xdebugFile"
             try {
-                Check-Download $imagickUrl $tmpDir $phpImagick
+                Save-PackageFile -Url $xdebugUrl -TargetDir $tmpDir -FileName $xdebugFile -ForceDownload $false
             }
             catch {
-                Write-Error "Failed to download Imagick $phpImagick`: $_"
-                Write-Error "Cancelling installation."
-                exit 1
+                Write-Error "Failed to download Xdebug $xdebugFile`: $_"
+                throw "Installation halted due to failed Xdebug download."
+            }
+        }
+
+        # Download Imagick if enabled
+        $imagickProp = Get-ObjectProperty $phpData "imagick"
+        if ($Config.Flags.InstallImagick -and -not [string]::IsNullOrWhiteSpace($imagickProp)) {
+            $imagickFile = if ($Config.BuildType -eq "NTS") { $imagickProp } else { $imagickProp.Replace("-nts", "") }
+            if ($imagickFile -match '^php_imagick-([^-]+)-') {
+                $imagickVer = $Matches[1]
+                $imagickUrl = "$($baseUrl.IMAGICK)$imagickVer/$imagickFile"
+                try {
+                    Save-PackageFile -Url $imagickUrl -TargetDir $tmpDir -FileName $imagickFile -ForceDownload $false
+                }
+                catch {
+                    Write-Error "Failed to download Imagick $imagickFile`: $_"
+                    throw "Installation halted due to failed Imagick download."
+                }
             }
         }
     }
-}
 
-# Process each PHP version
-foreach ($version in $whatToInstall) {
-    $phpData = $phpSourceVersions.$version
-    $phpBaseFile = if ($typeToInstall -eq "NTS") { $phpData.name } else { $phpData.name.Replace("-nts", "") }
-    $phpVersionDir = $phpData.alias
-    $phpDirExtract = Join-Path $phpDir $phpVersionDir
+    # Download Apache packages if enabled
+    if ($Config.Flags.InstallApache) {
+        $apacheFileName = $Config.ApacheBase
+        $apacheUrl = "$($baseUrl.APACHE)/$apacheFileName"
+        Save-PackageFile -Url $apacheUrl -TargetDir $tmpDir -FileName $apacheFileName -ForceDownload $Config.Flags.DownloadApache
 
-    # Clean and create directory
-    if (Test-Path $phpDirExtract) {
-        Remove-Item -Recurse -Force $phpDirExtract
-    }
-    New-Item -ItemType Directory -Path $phpDirExtract | Out-Null
-
-    # Ensure PHP tmp/log directory exists
-    $phpLogTmpDir = Join-Path $phpDir "tmp"
-    if (-not (Test-Path -Path $phpLogTmpDir)) {
-        New-Item -ItemType Directory -Path $phpLogTmpDir | Out-Null
+        $fcgiUrl = $baseUrl.APACHE_FCGI
+        $fcgiFileName = [System.IO.Path]::GetFileName($fcgiUrl)
+        Save-PackageFile -Url $fcgiUrl -TargetDir $tmpDir -FileName $fcgiFileName -ForceDownload $Config.Flags.DownloadApache
     }
 
-    # Extract PHP
-    Write-Output "Extracting $phpBaseFile to $phpDirExtract"
-    Expand-Archive -Path (Join-Path $tmpDir $phpBaseFile) -DestinationPath $phpDirExtract
-
-    # Configure PHP
-    $phpIni = Join-Path $phpDirExtract "php.ini"
-    Copy-Item (Join-Path $phpDirExtract $phpBaseConfig) $phpIni
-    Copy-Item (Join-Path $phpDirExtract "php.exe") (Join-Path $phpDirExtract "php${phpVersionDir}.exe")
-    Copy-Item (Join-Path $phpDirExtract "php-cgi.exe") (Join-Path $phpDirExtract "php${phpVersionDir}-cgi.exe")
-
-    # Configure extensions
-    $typeConfig = $phpData.config
-    $copyConfig = $phpSourceConfigExtension.$typeConfig
-    foreach ($value in $copyConfig) {
-        (Get-Content $phpIni) -replace ";$value", $value -replace "; $value", $value | Set-Content $phpIni
-    }
-
-    # Add base configuration
-    $phpSourceConfigBase.base | ForEach-Object {
-        Add-Content -Path $phpIni -Value $_
-    }
-
-    # Replace placeholders
-    (Get-Content $phpIni) -replace "{PHP_INSTALL_DIR}", ($phpDir + '/') -replace "{VERSION}", $phpVersionDir | Set-Content $phpIni
-
-    # Install Xdebug if needed
-    if ($config.InstallXdebug) {
-        $phpXdebug = if ($typeToInstall -eq "NTS") { $phpData.xdebug } else { $phpData.xdebug.Replace("-nts", "") }
-        $xdebugPath = Join-Path $phpDirExtract "ext\php_xdebug.dll"
-        Copy-Item (Join-Path $tmpDir $phpXdebug) $xdebugPath
-
-        $phpSourceConfigXdebug.$typeConfig | ForEach-Object {
-            Add-Content -Path $phpIni -Value $_
+    # Download Nginx package if enabled
+    if ($Config.Flags.InstallNginx) {
+        $nginxUrl = "$($baseUrl.NGINX)/$($Config.NginxBase)"
+        if ($Config.Flags.DownloadNginx) {
+            Write-Output "Downloading Nginx"
+            Download-File $nginxUrl (Join-Path $tmpDir $Config.NginxBase)
         }
-
-        (Get-Content $phpIni) -replace "php_xdebug.dll", $xdebugPath | Set-Content $phpIni
-    }
-
-    # Install Imagick if needed
-    if ($config.InstallImagick -and $phpData.imagick) {
-        $phpImagick = if ($typeToInstall -eq "NTS") { $phpData.imagick } else { $phpData.imagick.Replace("-nts", "") }
-        $imagickZip = Join-Path $tmpDir $phpImagick
-        $imagickTmpDir = Join-Path $tmpDir "imagick_$phpVersionDir"
-        if (Test-Path $imagickTmpDir) { Remove-Item -Recurse -Force $imagickTmpDir }
-        New-Item -ItemType Directory -Path $imagickTmpDir | Out-Null
-        Expand-Archive -Path $imagickZip -DestinationPath $imagickTmpDir
-
-        # Copy extension DLL
-        $extDll = Join-Path $imagickTmpDir "php_imagick.dll"
-        if (Test-Path $extDll) {
-            Copy-Item $extDll (Join-Path $phpDirExtract "ext\php_imagick.dll") -Force
+        else {
+            Check-Download $nginxUrl $tmpDir $Config.NginxBase
         }
-
-        # Copy dependency DLLs (CORE_RL_*.dll, IM_MOD_RL_*.dll, FILTER_*.dll, etc.) to PHP root dir
-        Get-ChildItem -Path $imagickTmpDir -Filter "*.dll" | Where-Object { $_.Name -ne "php_imagick.dll" } | ForEach-Object {
-            Copy-Item $_.FullName (Join-Path $phpDirExtract $_.Name) -Force
-        }
-
-        $phpSourceConfigImagick.$typeConfig | ForEach-Object {
-            Add-Content -Path $phpIni -Value $_
-        }
-    }
-
-    # Install Composer if needed
-    if ($config.InstallComposer) {
-        $composerSource = if ([int]$phpVersionDir -ge $composerConfig.MinimumVersion) { 
-            $composerConfig.MainPath 
-        }
-        else { 
-            $composerConfig.LtsPath 
-        }
-        Copy-Item $composerSource (Join-Path $phpDirExtract "composer.phar")
-            
-        $composerBat = Join-Path $phpDirExtract "composer.bat"
-        $composerVerBat = Join-Path $phpDirExtract "composer${phpVersionDir}.bat"
-        Copy-Item .\source\composer.bat $composerBat
-        Copy-Item .\source\composer.bat $composerVerBat
-    }
-
-    # Add to PATH if needed
-    if ($config.PhpPathRegister) {
-        $registerPath += $phpDirExtract
     }
 }
 
-# Apache Installation
-if ($config.InstallApache) {
+function Configure-PhpIni {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$IniTemplatePath,
+        [Parameter(Mandatory = $true)][string]$DestinationIniPath,
+        [Parameter(Mandatory = $true)][string]$PhpInstallDir,
+        [Parameter(Mandatory = $true)][string]$VersionAlias,
+        [Parameter(Mandatory = $true)][string]$ConfigType,
+        [Parameter(Mandatory = $true)][PSCustomObject]$Manifests,
+        [bool]$EnableXdebug = $false,
+        [string]$XdebugDllPath = "",
+        [bool]$EnableImagick = $false
+    )
+
+    if (-not (Test-Path -LiteralPath $IniTemplatePath)) {
+        throw "Base php.ini template not found at: $IniTemplatePath"
+    }
+
+    $content = Get-Content -LiteralPath $IniTemplatePath -Raw
+
+    # 1. Enable configured extensions in memory
+    $extensions = Get-ObjectProperty $Manifests.Extensions $ConfigType
+    if ($extensions) {
+        foreach ($ext in $extensions) {
+            $escaped = [regex]::Escape($ext)
+            $content = [regex]::Replace($content, ";\s*$escaped", $ext)
+        }
+    }
+
+    # 2. Append base configuration directives
+    $phpForwardDir = $PhpInstallDir.Replace('\', '/')
+    if (-not $phpForwardDir.EndsWith('/')) {
+        $phpForwardDir += '/'
+    }
+
+    $baseDirectives = @($Manifests.BaseConfig.base)
+    if ($baseDirectives.Count -gt 0) {
+        $baseBlock = ($baseDirectives -join "`r`n").Replace('{PHP_INSTALL_DIR}', $phpForwardDir).Replace('{VERSION}', $VersionAlias)
+        $content += "`r`n" + $baseBlock
+    }
+
+    # 3. Append Xdebug directives if enabled
+    $xdebugDirectives = Get-ObjectProperty $Manifests.Xdebug $ConfigType
+    if ($EnableXdebug -and $xdebugDirectives) {
+        $xdebugBlock = ($xdebugDirectives -join "`r`n").Replace('php_xdebug.dll', $XdebugDllPath)
+        $content += "`r`n" + $xdebugBlock
+    }
+
+    # 4. Append Imagick directives if enabled
+    $imagickDirectives = Get-ObjectProperty $Manifests.Imagick $ConfigType
+    if ($EnableImagick -and $imagickDirectives) {
+        $imagickBlock = $imagickDirectives -join "`r`n"
+        $content += "`r`n" + $imagickBlock
+    }
+
+    # Single write to disk
+    Set-Content -LiteralPath $DestinationIniPath -Value $content -Encoding UTF8
+}
+
+function Install-PhpVersion {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$Version,
+        [Parameter(Mandatory = $true)][PSCustomObject]$Config,
+        [Parameter(Mandatory = $true)][PSCustomObject]$Manifests,
+        [Parameter(Mandatory = $true)][string]$SourceDir
+    )
+
+    $phpData = Get-ObjectProperty $Manifests.PhpVersions $Version
+    if ($null -eq $phpData) {
+        Write-Warning "PHP version '$Version' configuration missing; skipping installation."
+        return $null
+    }
+
+    $phpName      = Get-ObjectProperty $phpData "name"
+    $versionAlias = Get-ObjectProperty $phpData "alias"
+    $configType   = Get-ObjectProperty $phpData "config"
+    $phpBaseFile  = if ($Config.BuildType -eq "NTS") { $phpName } else { $phpName.Replace("-nts", "") }
+    $phpExtractDir = Join-Path $Config.PhpDir $versionAlias
+
+    # Clean previous extraction directory
+    if (Test-Path -LiteralPath $phpExtractDir) {
+        Remove-Item -LiteralPath $phpExtractDir -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $phpExtractDir | Out-Null
+
+    # Ensure shared PHP tmp directory exists
+    $phpTmpDir = Join-Path $Config.PhpDir "tmp"
+    if (-not (Test-Path -LiteralPath $phpTmpDir)) {
+        New-Item -ItemType Directory -Path $phpTmpDir | Out-Null
+    }
+
+    # Extract PHP archive
+    $zipPath = Join-Path $Config.TmpDir $phpBaseFile
+    Write-Output "Extracting $phpBaseFile to $phpExtractDir"
+    Expand-Archive -LiteralPath $zipPath -DestinationPath $phpExtractDir
+
+    # Determine Xdebug path if enabled
+    $xdebugExtPath = Join-Path $phpExtractDir "ext\php_xdebug.dll"
+    $xdebugProp = Get-ObjectProperty $phpData "xdebug"
+    if ($Config.Flags.InstallXdebug -and -not [string]::IsNullOrWhiteSpace($xdebugProp)) {
+        $xdebugFileName = if ($Config.BuildType -eq "NTS") { $xdebugProp } else { $xdebugProp.Replace("-nts", "") }
+        $sourceXdebug = Join-Path $Config.TmpDir $xdebugFileName
+        if (Test-Path -LiteralPath $sourceXdebug) {
+            Copy-Item -LiteralPath $sourceXdebug -Destination $xdebugExtPath -Force
+        }
+    }
+
+    # Extract and copy Imagick DLLs if enabled
+    $imagickProp = Get-ObjectProperty $phpData "imagick"
+    $hasImagick = $Config.Flags.InstallImagick -and -not [string]::IsNullOrWhiteSpace($imagickProp)
+    if ($hasImagick) {
+        $imagickFileName = if ($Config.BuildType -eq "NTS") { $imagickProp } else { $imagickProp.Replace("-nts", "") }
+        $imagickZip = Join-Path $Config.TmpDir $imagickFileName
+
+        if (Test-Path -LiteralPath $imagickZip) {
+            $imagickTmp = Join-Path $Config.TmpDir "imagick_$versionAlias"
+            if (Test-Path -LiteralPath $imagickTmp) { Remove-Item -LiteralPath $imagickTmp -Recurse -Force }
+            New-Item -ItemType Directory -Path $imagickTmp | Out-Null
+
+            Expand-Archive -LiteralPath $imagickZip -DestinationPath $imagickTmp
+
+            # Copy php_imagick.dll to ext/
+            $extDll = Join-Path $imagickTmp "php_imagick.dll"
+            if (Test-Path -LiteralPath $extDll) {
+                Copy-Item -LiteralPath $extDll -Destination (Join-Path $phpExtractDir "ext\php_imagick.dll") -Force
+            }
+
+            # Copy dependency DLLs (CORE_RL_*.dll, etc.) to PHP root folder
+            Get-ChildItem -LiteralPath $imagickTmp -Filter "*.dll" | Where-Object { $_.Name -ne "php_imagick.dll" } | ForEach-Object {
+                Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $phpExtractDir $_.Name) -Force
+            }
+
+            Remove-Item -LiteralPath $imagickTmp -Recurse -Force
+        }
+    }
+
+    # Configure php.ini
+    $iniTemplate = Join-Path $phpExtractDir "php.ini-development"
+    $targetIni = Join-Path $phpExtractDir "php.ini"
+    Configure-PhpIni `
+        -IniTemplatePath $iniTemplate `
+        -DestinationIniPath $targetIni `
+        -PhpInstallDir $Config.PhpDir `
+        -VersionAlias $versionAlias `
+        -ConfigType $configType `
+        -Manifests $Manifests `
+        -EnableXdebug $Config.Flags.InstallXdebug `
+        -XdebugDllPath $xdebugExtPath `
+        -EnableImagick $hasImagick
+
+    # Generate versioned binary aliases
+    Copy-Item -LiteralPath (Join-Path $phpExtractDir "php.exe") -Destination (Join-Path $phpExtractDir "php${versionAlias}.exe") -Force
+    Copy-Item -LiteralPath (Join-Path $phpExtractDir "php-cgi.exe") -Destination (Join-Path $phpExtractDir "php${versionAlias}-cgi.exe") -Force
+
+    # Configure Composer if enabled
+    if ($Config.Flags.InstallComposer) {
+        $composerMinVer = 72
+        $composerSource = if ([int]$versionAlias -ge $composerMinVer) {
+            Join-Path $Config.TmpDir "composer.phar"
+        } else {
+            Join-Path $Config.TmpDir "composer-lts.phar"
+        }
+
+        if (Test-Path -LiteralPath $composerSource) {
+            Copy-Item -LiteralPath $composerSource -Destination (Join-Path $phpExtractDir "composer.phar") -Force
+        }
+
+        $composerBatTemplate = Join-Path $SourceDir "composer.bat"
+        if (Test-Path -LiteralPath $composerBatTemplate) {
+            Copy-Item -LiteralPath $composerBatTemplate -Destination (Join-Path $phpExtractDir "composer.bat") -Force
+            Copy-Item -LiteralPath $composerBatTemplate -Destination (Join-Path $phpExtractDir "composer${versionAlias}.bat") -Force
+        }
+    }
+
+    return $phpExtractDir
+}
+
+function Install-ApacheServer {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][PSCustomObject]$Config,
+        [Parameter(Mandatory = $true)][PSCustomObject]$Manifests,
+        [Parameter(Mandatory = $true)][string]$SourceDir
+    )
+
+    $apacheDir = $Config.ApacheDir
     Write-Output "Install Apache ${apacheDir}"
-    if (Test-Path $apacheDir) {
-        Remove-Item -Recurse -Force $apacheDir
+
+    if (Test-Path -LiteralPath $apacheDir) {
+        Remove-Item -LiteralPath $apacheDir -Recurse -Force
     }
 
-    $baseApacheName = $env:APACHE_BASE ?? "httpd-2.4.63-250207-win64-VS17.zip"
-    $urlApache = "$($baseUrl.APACHE)/$baseApacheName"
-    $urlApacheFcgi = $baseUrl.APACHE_FCGI
+    $apacheFileName = $Config.ApacheBase
+    $tmpApacheZip = Join-Path $Config.TmpDir $apacheFileName
 
-    $tmpDownloadApache = Join-Path $tmpDir "APACHE.zip"
-    $tmpDownloadApacheFcgi = Join-Path $tmpDir "APACHE_FCGI.zip"
+    $fcgiUrl = $Manifests.BaseUrl.APACHE_FCGI
+    $fcgiFileName = [System.IO.Path]::GetFileName($fcgiUrl)
+    $tmpFcgiZip = Join-Path $Config.TmpDir $fcgiFileName
 
-    if ($config.DownloadApache) {
-        Write-Output "Downloading Apache"
-        Download-File $urlApache $tmpDownloadApache
-        Download-File $urlApacheFcgi $tmpDownloadApacheFcgi
+    if (-not (Test-Path -LiteralPath $tmpApacheZip) -and (Test-Path -LiteralPath (Join-Path $Config.TmpDir "APACHE.zip"))) {
+        $tmpApacheZip = Join-Path $Config.TmpDir "APACHE.zip"
     }
-    else {
-        Check-Download $urlApache $tmpDir "APACHE.zip"
-        Check-Download $urlApacheFcgi $tmpDir "APACHE_FCGI.zip"
+    if (-not (Test-Path -LiteralPath $tmpFcgiZip) -and (Test-Path -LiteralPath (Join-Path $Config.TmpDir "APACHE_FCGI.zip"))) {
+        $tmpFcgiZip = Join-Path $Config.TmpDir "APACHE_FCGI.zip"
     }
 
     # Extract Apache
-    $dirTmpApache = Join-Path $tmpDir "APACHE"
-    if (Test-Path $dirTmpApache) {
-        Remove-Item -Recurse -Force $dirTmpApache
-    }
-    New-Item -ItemType Directory -Path $dirTmpApache | Out-Null
-    Expand-Archive -Path $tmpDownloadApache -DestinationPath $dirTmpApache
-    
-    $dirTmpApacheSub = Get-ChildItem -Path $dirTmpApache -Directory | Select-Object -First 1 -ExpandProperty Name
-    Move-Item (Join-Path $dirTmpApache $dirTmpApacheSub) $apacheDir
+    $tmpApacheDir = Join-Path $Config.TmpDir "APACHE"
+    if (Test-Path -LiteralPath $tmpApacheDir) { Remove-Item -LiteralPath $tmpApacheDir -Recurse -Force }
+    New-Item -ItemType Directory -Path $tmpApacheDir | Out-Null
+    Expand-Archive -LiteralPath $tmpApacheZip -DestinationPath $tmpApacheDir
 
-    # Extract FCGI module
-    $dirTmpApacheFcgi = Join-Path $tmpDir "APACHE_FCGI"
-    if (Test-Path $dirTmpApacheFcgi) {
-        Remove-Item -Recurse -Force $dirTmpApacheFcgi
-    }
-    New-Item -ItemType Directory -Path $dirTmpApacheFcgi | Out-Null
-    Expand-Archive -Path $tmpDownloadApacheFcgi -DestinationPath $dirTmpApacheFcgi
-    Move-Item (Join-Path $dirTmpApacheFcgi "mod_fcgid.so") (Join-Path $apacheDir "modules\mod_fcgid.so")
+    $subDir = Get-ChildItem -LiteralPath $tmpApacheDir -Directory | Select-Object -First 1 -ExpandProperty Name
+    Move-Item -LiteralPath (Join-Path $tmpApacheDir $subDir) -Destination $apacheDir
 
-    # Configure Apache
+    # Extract mod_fcgid
+    $tmpFcgiDir = Join-Path $Config.TmpDir "APACHE_FCGI"
+    if (Test-Path -LiteralPath $tmpFcgiDir) { Remove-Item -LiteralPath $tmpFcgiDir -Recurse -Force }
+    New-Item -ItemType Directory -Path $tmpFcgiDir | Out-Null
+    Expand-Archive -LiteralPath $tmpFcgiZip -DestinationPath $tmpFcgiDir
+
+    $fcgiModule = Join-Path $tmpFcgiDir "mod_fcgid.so"
+    if (Test-Path -LiteralPath $fcgiModule) {
+        Move-Item -LiteralPath $fcgiModule -Destination (Join-Path $apacheDir "modules\mod_fcgid.so") -Force
+    }
+
+    # Configure httpd.conf
     $httpdConf = Join-Path $apacheDir "conf\httpd.conf"
-    Move-Item $httpdConf "$httpdConf.tmp" -Force
-    Copy-Item .\source\apache\httpd.conf $httpdConf
+    if (Test-Path -LiteralPath $httpdConf) {
+        Move-Item -LiteralPath $httpdConf -Destination "$httpdConf.tmp" -Force
+    }
+    Copy-Item -LiteralPath (Join-Path $SourceDir "apache\httpd.conf") -Destination $httpdConf
 
-    $apacheDirRevert = $apacheDir.Replace("\", "/")
-    (Get-Content $httpdConf) -replace "{{ROOT}}", $apacheDirRevert | Set-Content $httpdConf
-
-    # Configure listening ports
-    $listenPorts = $whatToInstall | ForEach-Object {
-        $version = $_.Trim()
-        $alias = $phpSourceVersions.$version.alias
+    $apacheForward = $apacheDir.Replace('\', '/')
+    $listenDirectives = $Config.Versions | ForEach-Object {
+        $v = $_.Trim()
+        $vData = Get-ObjectProperty $Manifests.PhpVersions $v
+        $alias = if ($vData) { $vData.alias } else { "" }
         "Listen 80$alias"
     }
-    (Get-Content $httpdConf) -replace "{{LISTEN_PORT}}", ($listenPorts -join "`n") | Set-Content $httpdConf
 
-    # Configure virtual hosts
-    $httpdVhostConf = Join-Path $apacheDir "conf\extra\httpd-vhosts.conf"
-    Move-Item $httpdVhostConf "$httpdVhostConf.tmp" -Force
-    Copy-Item .\source\apache\httpd-vhosts.conf $httpdVhostConf
+    $confContent = Get-Content -LiteralPath $httpdConf -Raw
+    $confContent = $confContent.Replace('{{ROOT}}', $apacheForward)
+    $confContent = $confContent.Replace('{{LISTEN_PORT}}', ($listenDirectives -join "`n"))
+    Set-Content -LiteralPath $httpdConf -Value $confContent -Encoding UTF8
 
-    $htdocsRevert = $htdocs.Replace("\", "/")
-    (Get-Content $httpdVhostConf) -replace "{{HTDOCS}}", $htdocsRevert | Set-Content $httpdVhostConf
-    (Get-Content $httpdVhostConf) -replace "{{PHP}}", $phpDir.Replace("\", "/") | Set-Content $httpdVhostConf
+    # Configure httpd-vhosts.conf
+    $vhostConf = Join-Path $apacheDir "conf\extra\httpd-vhosts.conf"
+    if (Test-Path -LiteralPath $vhostConf) {
+        Move-Item -LiteralPath $vhostConf -Destination "$vhostConf.tmp" -Force
+    }
+    Copy-Item -LiteralPath (Join-Path $SourceDir "apache\httpd-vhosts.conf") -Destination $vhostConf
 
-    # Copy additional host configurations
+    $htdocsForward = $Config.HtdocsDir.Replace('\', '/')
+    $phpForward = $Config.PhpDir.Replace('\', '/')
+
+    $vhostContent = Get-Content -LiteralPath $vhostConf -Raw
+    $vhostContent = $vhostContent.Replace('{{HTDOCS}}', $htdocsForward)
+    $vhostContent = $vhostContent.Replace('{{PHP}}', $phpForward)
+    Set-Content -LiteralPath $vhostConf -Value $vhostContent -Encoding UTF8
+
+    # Copy virtual host extra configurations
     $hostConfDir = Join-Path $apacheDir "conf\extra\host"
     New-Item -ItemType Directory -Path $hostConfDir -Force | Out-Null
-    Copy-Item -Path .\source\apache\host\* -Destination $hostConfDir -Recurse
+    Copy-Item -Path (Join-Path $SourceDir "apache\host\*") -Destination $hostConfDir -Recurse -Force
 
     # Copy utility scripts
-    Copy-Item -Path .\source\apache\apacheRegister.ps1 (Join-Path $apacheDir "bin\apacheRegister.ps1")
-    Copy-Item -Path .\source\apache\apacheUnistall.ps1 (Join-Path $apacheDir "bin\apacheUnistall.ps1")
-    Copy-Item -Path .\source\apache\apacheTest.ps1 (Join-Path $apacheDir "bin\apacheTest.ps1")
+    $binDir = Join-Path $apacheDir "bin"
+    Copy-Item -LiteralPath (Join-Path $SourceDir "apache\apacheRegister.ps1") -Destination (Join-Path $binDir "apacheRegister.ps1") -Force
+    Copy-Item -LiteralPath (Join-Path $SourceDir "apache\apacheUnistall.ps1") -Destination (Join-Path $binDir "apacheUnistall.ps1") -Force
+    Copy-Item -LiteralPath (Join-Path $SourceDir "apache\apacheTest.ps1") -Destination (Join-Path $binDir "apacheTest.ps1") -Force
 
-    # Add to PATH if needed
-    if ($config.ApachePathRegister) {
-        $registerPath += (Join-Path $apacheDir "bin")
-    }
+    return $binDir
 }
 
-# Nginx Installation
-if ($config.InstallNginx) {
+function Install-NginxServer {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][PSCustomObject]$Config,
+        [Parameter(Mandatory = $true)][string]$SourceDir
+    )
+
+    $nginxDir = $Config.NginxDir
     Write-Output "Install Nginx ${nginxDir}"
-    if (Test-Path $nginxDir) {
-        Remove-Item -Recurse -Force $nginxDir
+
+    if (Test-Path -LiteralPath $nginxDir) {
+        Remove-Item -LiteralPath $nginxDir -Recurse -Force
     }
 
-    $baseNginxName = $env:NGINX_BASE ?? "nginx-1.28.0.zip"
-    $urlNginx = "$($baseUrl.NGINX)/$baseNginxName"
-    $tmpDownloadNginx = Join-Path $tmpDir $baseNginxName
-
-    if ($config.DownloadNginx) {
-        Write-Output "Downloading Nginx"
-        Download-File $urlNginx $tmpDownloadNginx
-    }
-    else {
-        Check-Download $urlNginx $tmpDir $baseNginxName
-    }
+    $tmpNginxZip = Join-Path $Config.TmpDir $Config.NginxBase
 
     # Extract Nginx
-    $dirTmpNginx = Join-Path $tmpDir "NGINX"
-    if (Test-Path $dirTmpNginx) {
-        Remove-Item -Recurse -Force $dirTmpNginx
-    }
-    New-Item -ItemType Directory -Path $dirTmpNginx | Out-Null
-    Expand-Archive -Path $tmpDownloadNginx -DestinationPath $dirTmpNginx
+    $tmpNginxDir = Join-Path $Config.TmpDir "NGINX"
+    if (Test-Path -LiteralPath $tmpNginxDir) { Remove-Item -LiteralPath $tmpNginxDir -Recurse -Force }
+    New-Item -ItemType Directory -Path $tmpNginxDir | Out-Null
+    Expand-Archive -LiteralPath $tmpNginxZip -DestinationPath $tmpNginxDir
 
-    $dirTmpNginxSub = Get-ChildItem -Path $dirTmpNginx -Directory | Select-Object -First 1 -ExpandProperty Name
-    Move-Item (Join-Path $dirTmpNginx $dirTmpNginxSub) $nginxDir
+    $subDir = Get-ChildItem -LiteralPath $tmpNginxDir -Directory | Select-Object -First 1 -ExpandProperty Name
+    Move-Item -LiteralPath (Join-Path $tmpNginxDir $subDir) -Destination $nginxDir
 
-    # # Configure Nginx
+    # Configure nginx.conf
     $conf = Join-Path $nginxDir "conf\nginx.conf"
-    Move-Item $conf "$conf.tmp" -Force
-    Copy-Item .\source\nginx\nginx.conf $conf
+    if (Test-Path -LiteralPath $conf) {
+        Move-Item -LiteralPath $conf -Destination "$conf.tmp" -Force
+    }
+    Copy-Item -LiteralPath (Join-Path $SourceDir "nginx\nginx.conf") -Destination $conf
 
-    $htdocsRevert = $htdocs.Replace("\", "/")
-    (Get-Content $conf) -replace "{{HTDOCS}}", $htdocsRevert | Set-Content $conf
+    $htdocsForward = $Config.HtdocsDir.Replace('\', '/')
+    $confContent = Get-Content -LiteralPath $conf -Raw
+    $confContent = $confContent.Replace('{{HTDOCS}}', $htdocsForward)
+    Set-Content -LiteralPath $conf -Value $confContent -Encoding UTF8
 
-    # Copy additional host configurations
+    # Copy server block configurations
     $hostConfDir = Join-Path $nginxDir "conf\server"
     New-Item -ItemType Directory -Path $hostConfDir -Force | Out-Null
-    Copy-Item -Path .\source\nginx\server\* -Destination $hostConfDir -Recurse
+    Copy-Item -Path (Join-Path $SourceDir "nginx\server\*") -Destination $hostConfDir -Recurse -Force
 
-    # configure runner 
-    $nginxRunner = Join-Path $nginxDir "webserver_nginx.bat"
-    Copy-Item -Path .\source\nginx\webserver_nginx.bat $nginxRunner
-    
-    (Get-Content $nginxRunner) -replace "{{ROOT}}", $nginxDir | Set-Content $nginxRunner
-    (Get-Content $nginxRunner) -replace "{{PHP_DIR}}", $phpDir | Set-Content $nginxRunner
+    # Configure launcher batch script
+    $runner = Join-Path $nginxDir "webserver_nginx.bat"
+    Copy-Item -LiteralPath (Join-Path $SourceDir "nginx\webserver_nginx.bat") -Destination $runner -Force
 
-    # Add to PATH if needed
-    if ($config.NginxPathRegister) {
-        $registerPath += $nginxDir
+    $runnerContent = Get-Content -LiteralPath $runner -Raw
+    $runnerContent = $runnerContent.Replace('{{ROOT}}', $nginxDir)
+    $runnerContent = $runnerContent.Replace('{{PHP_DIR}}', $Config.PhpDir)
+    Set-Content -LiteralPath $runner -Value $runnerContent -Encoding UTF8
+
+    return $nginxDir
+}
+
+function Register-EnvironmentPaths {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$PathName,
+        [Parameter(Mandatory = $true)][string[]]$PathsToRegister
+    )
+
+    $validPaths = @($PathsToRegister | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
+    if ($validPaths.Count -gt 0) {
+        $combined = $validPaths -join ";"
+        Write-Output "Registering environment paths to %$PathName%: $combined"
+        Register-Path-Web $PathName $combined
     }
 }
 
-# Cleanup
-if ($config.CleanTmpDir) {
-    Remove-Item -Recurse -Force $tmpDir
+function Clear-TemporaryFiles {
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][string]$TmpDir)
+
+    if (Test-Path -LiteralPath $TmpDir) {
+        Write-Output "Cleaning temporary directory: $TmpDir"
+        Remove-Item -LiteralPath $TmpDir -Recurse -Force
+    }
 }
 
-# Register paths
-if ($config.PhpPathRegister -or $config.ApachePathRegister -or $config.NginxPathRegister) {
-    Register-Path-Web $pathName ($registerPath -join ";")
+# --- 3. Main Orchestrator ---
+
+function Invoke-Installer {
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    param(
+        [hashtable]$BoundParameters,
+        [string]$RootDirectory
+    )
+
+    $sourceDir = Join-Path $RootDirectory "source"
+    $manifests = Get-SourceManifests -SourceDir $sourceDir
+    $config = Get-InstallerConfig -CliParams $BoundParameters -RootDirectory $RootDirectory -Manifests $manifests
+
+    Show-InstallerBanner -Config $config
+
+    # Step 1: Optional Visual C++ Redistributables
+    if ($config.Flags.InstallVCRedist) {
+        $vcManifest = Join-Path $sourceDir "winget-VCRedist.json"
+        Invoke-VCRedistInstall -ManifestPath $vcManifest
+    }
+
+    # Step 2: Download or verify all required packages upfront (fail-fast)
+    Download-InstallerPackages -Config $config -Manifests $manifests
+
+    # Step 3: Install and configure each PHP version
+    $pathsToRegister = @()
+    foreach ($ver in $config.Versions) {
+        $installedPath = Install-PhpVersion `
+            -Version $ver `
+            -Config $config `
+            -Manifests $manifests `
+            -SourceDir $sourceDir
+
+        if ($installedPath -and $config.Flags.RegisterPhpPath) {
+            $pathsToRegister += $installedPath
+        }
+    }
+
+    # Step 4: Install and configure Apache HTTPD
+    if ($config.Flags.InstallApache) {
+        $apacheBin = Install-ApacheServer -Config $config -Manifests $manifests -SourceDir $sourceDir
+        if ($config.Flags.RegisterApachePath -and $apacheBin) {
+            $pathsToRegister += $apacheBin
+        }
+    }
+
+    # Step 5: Install and configure Nginx
+    if ($config.Flags.InstallNginx) {
+        $nginxPath = Install-NginxServer -Config $config -SourceDir $sourceDir
+        if ($config.Flags.RegisterNginxPath -and $nginxPath) {
+            $pathsToRegister += $nginxPath
+        }
+    }
+
+    # Step 6: Temporary directory cleanup
+    if ($config.Flags.CleanTmpDir) {
+        Clear-TemporaryFiles -TmpDir $config.TmpDir
+    }
+
+    # Step 7: System environment path registration
+    if ($pathsToRegister.Count -gt 0) {
+        Register-EnvironmentPaths -PathName $config.PathEnvName -PathsToRegister $pathsToRegister
+    }
+
+    Write-Output "=== installation completed successfully ==="
 }
+
+# Execute orchestration
+Invoke-Installer -BoundParameters $PSBoundParameters -RootDirectory $ScriptRoot

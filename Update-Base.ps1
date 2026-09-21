@@ -1,30 +1,32 @@
 <#
 .SYNOPSIS
-    Reference script to check for newer PHP and Xdebug package names and update source/php-versions.json.
+    Reference script to check for newer PHP, Xdebug, Imagick, and Apache packages and update source manifests.
 
 .DESCRIPTION
-    Reads source/php-versions.json and source/baseUrl.json, compares each PHP build name against the latest available
-    file names on windows.php.net and xdebug.org, and can optionally update the JSON file automatically.
+    Reads source/php-versions.json and source/baseUrl.json, compares package names against latest releases on
+    windows.php.net, apachelounge.com, and xdebug.org, and updates source/baseUrl.json and source/php-versions.json.
 
 .PARAMETER Update
-    If set, the script updates source/php-versions.json with discovered latest package names.
+    If set, the script updates source/php-versions.json and source/baseUrl.json with discovered latest package names.
 
 .PARAMETER JsonPath
     Relative or absolute path to the PHP versions JSON file. Defaults to .\source\php-versions.json.
 
-.EXAMPLE
-    .\Update-PHPVersions.ps1
+.PARAMETER Prefer64
+    Prefer 64-bit binaries where available. Defaults to $true.
 
 .EXAMPLE
-    .\Update-PHPVersions.ps1 -Update
+    .\Update-Base.ps1
+
+.EXAMPLE
+    .\Update-Base.ps1 -Update
 #>
 
 [CmdletBinding()]
 param(
     [switch]$Update,
     [string]$JsonPath = ".\source\php-versions.json",
-    [bool]$Prefer64 = $true,
-    [string]$EnvPath = ".\.env.sample"
+    [bool]$Prefer64 = $true
 )
 
 function Write-Log {
@@ -111,23 +113,28 @@ function Get-LatestPhpPackage {
 function Get-LatestXdebugPackage {
     param(
         [string[]]$Files,
-        [string]$PhpMajorMinor
+        [string]$PhpMajorMinor,
+        [string]$Type = 'nts'
     )
 
-        $pattern = "^php_xdebug-(\d+\.\d+\.\d+)-$PhpMajorMinor-.*\.dll$"
-        $candidates = $Files | Where-Object { $_ -match $pattern }
-        if (-not $candidates) { return $null }
+    $pattern = if (-not [string]::IsNullOrWhiteSpace($Type)) {
+        "^php_xdebug-(\d+\.\d+\.\d+)-$PhpMajorMinor-.*-$Type-.*\.dll$"
+    } else {
+        "^php_xdebug-(\d+\.\d+\.\d+)-$PhpMajorMinor-.*\.dll$"
+    }
+    $candidates = $Files | Where-Object { $_ -match $pattern }
+    if (-not $candidates) { return $null }
 
-        # Prefer 64-bit Xdebug binaries (x86_64 / x64) when requested
-        if ($Prefer64) {
-            $candidates64 = $candidates | Where-Object { $_ -match 'x86_64|x64' }
-            if ($candidates64 -and $candidates64.Count -gt 0) { $candidates = $candidates64 }
-        }
+    # Prefer 64-bit Xdebug binaries (x86_64 / x64) when requested
+    if ($Prefer64) {
+        $candidates64 = $candidates | Where-Object { $_ -match 'x86_64|x64' }
+        if ($candidates64 -and $candidates64.Count -gt 0) { $candidates = $candidates64 }
+    }
 
-        return $candidates | Sort-Object {
-            $v = Get-XdebugVersionFromFileName $_
-            if ($null -eq $v) { [version]'0.0.0' } else { $v }
-        } -Descending | Select-Object -First 1
+    return $candidates | Sort-Object {
+        $v = Get-XdebugVersionFromFileName $_
+        if ($null -eq $v) { [version]'0.0.0' } else { $v }
+    } -Descending | Select-Object -First 1
 }
 
 function Get-ImagickVersionFromFileName {
@@ -224,7 +231,7 @@ foreach ($versionKey in $phpVersions.PSObject.Properties.Name) {
     $searchFiles = if ($entry.download -eq 'release') { $phpReleaseFiles } else { $phpArchiveFiles }
     $latestPhpName = Get-LatestPhpPackage -Files $searchFiles -PhpMajorMinor $phpMajorMinor -Type $type
 
-    $latestXdebugName = Get-LatestXdebugPackage -Files $xdebugFiles -PhpMajorMinor $phpMajorMinor
+    $latestXdebugName = Get-LatestXdebugPackage -Files $xdebugFiles -PhpMajorMinor $phpMajorMinor -Type $type
     $latestImagickName = Get-LatestImagickPackage -Files $imagickFiles -PhpMajorMinor $phpMajorMinor -Type $type
 
     if ($latestPhpName -and $latestPhpName -ne $currentPhpName) {
@@ -264,15 +271,6 @@ foreach ($versionKey in $phpVersions.PSObject.Properties.Name) {
     }
 }
 
-# Check for APACHE_BASE updates in environment sample and env files
-$resolvedEnvPath = Resolve-RelativePath $EnvPath
-$envPaths = @()
-if (Test-Path $resolvedEnvPath) { $envPaths += $resolvedEnvPath }
-$resolvedDotEnvPath = Resolve-RelativePath '..\.env'
-if ((Test-Path $resolvedDotEnvPath) -and ($resolvedDotEnvPath -ne $resolvedEnvPath)) {
-    $envPaths += $resolvedDotEnvPath
-}
-
 # Determine latest apache package from apacheFiles
 function Get-ApacheVersionFromFileName {
     param([string]$FileName)
@@ -299,41 +297,25 @@ function Get-LatestApachePackage {
 
 $latestApacheName = Get-LatestApachePackage -Files $apacheFiles
 
-foreach ($targetEnvPath in $envPaths) {
-    $envText = Get-Content $targetEnvPath -Raw
-    if ($envText -match 'APACHE_BASE\s*=\s*(\S+)') {
-        $currentApacheBase = $Matches[1]
+# Check APACHE_BASE in source/baseUrl.json
+$currentApacheBaseInJson = if ($baseUrl.PSObject.Properties['APACHE_BASE']) { $baseUrl.APACHE_BASE } else { $null }
+if ($latestApacheName -and $latestApacheName -ne $currentApacheBaseInJson) {
+    $changes += [pscustomobject]@{
+        Key     = 'APACHE_BASE'
+        Field   = 'APACHE_BASE'
+        File    = $baseUrlPath
+        Current = $currentApacheBaseInJson
+        Latest  = $latestApacheName
     }
-    else {
-        $currentApacheBase = $null
-    }
-
-    if ($latestApacheName -and $latestApacheName -ne $currentApacheBase) {
-        $apacheChange = [pscustomobject]@{
-            Key = 'APACHE_BASE'
-            Field = 'APACHE_BASE'
-            File = $targetEnvPath
-            Current = $currentApacheBase
-            Latest = $latestApacheName
-        }
-        $changes += $apacheChange
-        if ($Update) {
-            if ($currentApacheBase) {
-                # replace existing APACHE_BASE line using multiline mode so later lines are updated correctly
-                $envText = $envText -replace '(?m)^(APACHE_BASE\s*=\s*).+', "`$1$latestApacheName"
-            }
-            else {
-                # append variable if it does not exist yet, preserving existing file termination without duplicate blank lines
-                $envText = $envText.TrimEnd("`r", "`n")
-                $envText = $envText + "`r`nAPACHE_BASE=$latestApacheName"
-            }
-            Set-Content -Path $targetEnvPath -Value $envText -Encoding UTF8
-        }
+    if ($Update) {
+        $baseUrl.APACHE_BASE = $latestApacheName
+        $baseUrlJson = $baseUrl | ConvertTo-Json -Depth 6
+        Set-Content -Path $baseUrlPath -Value $baseUrlJson -Encoding UTF8
     }
 }
 
 if (-not $changes) {
-    Write-Host 'No updates detected. source/php-versions.json and env files are current.'
+    Write-Host 'No updates detected. source/php-versions.json and source/baseUrl.json are current.'
     return
 }
 
@@ -356,5 +338,5 @@ if ($Update) {
     }
 }
 else {
-    Write-Host "Run with -Update to apply the detected package name changes to the JSON file and env files."
+    Write-Host "Run with -Update to apply the detected package name changes to source/php-versions.json and source/baseUrl.json."
 }
