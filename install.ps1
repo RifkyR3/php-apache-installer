@@ -464,6 +464,108 @@ function Configure-PhpIni {
 
     # Single write to disk
     Set-Content -LiteralPath $DestinationIniPath -Value $content -Encoding UTF8
+
+    # Disable duplicate initiations (e.g. extension=mysqli example vs real extension)
+    Disable-DuplicatePhpIniDirectives -IniPath $DestinationIniPath
+}
+
+function Disable-DuplicatePhpIniDirectives {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$IniPath
+    )
+
+    if (-not (Test-Path -LiteralPath $IniPath)) {
+        Write-Warning "PHP configuration file not found at: $IniPath"
+        return
+    }
+
+    $lines = [System.IO.File]::ReadAllLines($IniPath)
+    $modified = $false
+    $extOccurrences = @{}
+
+    # 1. Scan active extension initiations and directives
+    for ($i = 0; $i -lt $lines.Length; $i++) {
+        $line = $lines[$i]
+        if ($line -match '^\s*[;#]' -or [string]::IsNullOrWhiteSpace($line)) {
+            continue
+        }
+
+        # Check for extension or zend_extension directive
+        if ($line -match '^\s*(?<type>extension|zend_extension)\s*=\s*(?<quote>["'']?)(?<target>[^"''\r\n;]+)\k<quote>') {
+            $rawTarget = $matches['target'].Trim()
+            $normTarget = [System.IO.Path]::GetFileNameWithoutExtension($rawTarget) -replace '^php_', ''
+            $key = "$($matches['type']):$normTarget".ToLowerInvariant()
+
+            # Check if this occurrence is located inside an example/doc block
+            $start = [Math]::Max(0, $i - 6)
+            $contextBefore = ($lines[$start..$i] -join "`n")
+            $end = [Math]::Min($lines.Length - 1, $i + 4)
+            $contextAfter = ($lines[$i..$end] -join "`n")
+
+            $isExample = ($contextBefore -match ';\s*For example:' -or
+                          $contextBefore -match ';\s*syntax:' -or
+                          $contextAfter -match ';\s*When the extension library')
+
+            if (-not $extOccurrences.ContainsKey($key)) {
+                $extOccurrences[$key] = [System.Collections.Generic.List[PSCustomObject]]::new()
+            }
+
+            $extOccurrences[$key].Add([PSCustomObject]@{
+                Index      = $i
+                RawLine    = $line
+                IsExample  = $isExample
+                NormTarget = $normTarget
+            })
+        }
+        # Check for extension_dir directive
+        elseif ($line -match '^\s*(?<directive>extension_dir)\s*=\s*(?<value>[^;\r\n]+)') {
+            $key = "directive:extension_dir"
+            if (-not $extOccurrences.ContainsKey($key)) {
+                $extOccurrences[$key] = [System.Collections.Generic.List[PSCustomObject]]::new()
+            }
+            $extOccurrences[$key].Add([PSCustomObject]@{
+                Index      = $i
+                RawLine    = $line
+                IsExample  = $false
+                NormTarget = "extension_dir"
+            })
+        }
+    }
+
+    # 2. Process duplicates and disable redundant lines
+    foreach ($key in $extOccurrences.Keys) {
+        $list = $extOccurrences[$key]
+        if ($list.Count -le 1) {
+            continue
+        }
+
+        # Determine which occurrence to keep:
+        # Prefer the first non-example occurrence (e.g. from the extension list).
+        # If all are non-examples, keep the first one.
+        $nonExamples = @($list | Where-Object { -not $_.IsExample })
+        $keepItem = if ($nonExamples.Count -gt 0) {
+            $nonExamples[0]
+        } else {
+            $list[0]
+        }
+
+        foreach ($item in $list) {
+            if ($item.Index -eq $keepItem.Index) {
+                continue
+            }
+
+            # Disable duplicate occurrence by commenting it out with ';'
+            $lines[$item.Index] = ";$($lines[$item.Index])"
+            $modified = $true
+            Write-Output "Disabled duplicate PHP initiation (Line $($item.Index + 1)): $($item.RawLine)"
+        }
+    }
+
+    if ($modified) {
+        [System.IO.File]::WriteAllLines($IniPath, $lines, [System.Text.Encoding]::UTF8)
+        Write-Output "Deduplicated active initiations in: $IniPath"
+    }
 }
 
 function Install-PhpVersion {
@@ -557,6 +659,9 @@ function Install-PhpVersion {
         -EnableXdebug $Config.Flags.InstallXdebug `
         -XdebugDllPath $xdebugExtPath `
         -EnableImagick $hasImagick
+
+    # Check and disable duplicate initiations after Configure-PhpIni finishes
+    Disable-DuplicatePhpIniDirectives -IniPath $targetIni
 
     # Generate versioned binary aliases
     Copy-Item -LiteralPath (Join-Path $phpExtractDir "php.exe") -Destination (Join-Path $phpExtractDir "php${versionAlias}.exe") -Force
