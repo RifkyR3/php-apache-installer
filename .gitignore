@@ -4,6 +4,7 @@
 !01Include.ps1
 !02Function.ps1
 !install.ps1
+!install.bat
 !composerUpdate.ps1
 !source/
 !source/*
@@ -13,5 +14,6 @@
 !www/*
 !.env.sample
 !Update-Base.ps1
+!Update-Base.bat
 !control.ps1
 !control.bat

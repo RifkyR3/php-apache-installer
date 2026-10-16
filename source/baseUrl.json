@@ -1,6 +1,6 @@
 {
   "NGINX": "https://github.com/nginx/nginx/releases/download/",
-  "NGINX_BASE": "nginx-1.30.5.zip",
+  "NGINX_BASE": "nginx-1.30.6.zip",
   "APACHE": "https://www.apachelounge.com/download/VS18/binaries",
   "APACHE_BASE": "httpd-2.4.69-261002-Win64-VS18.zip",
   "APACHE_FCGI": "https://www.apachelounge.com/download/VS18/modules/mod_fcgid-2.3.10-win64-VS18.zip",

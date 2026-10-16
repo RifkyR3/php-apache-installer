@@ -36,24 +36,37 @@ winget --version
 curl --version
 ```
 
-Quick examples:
+### Installation Methods:
 
+#### 1. Interactive Menu (Recommended for Beginners & Quick Setups)
+Double-click `install.bat` in Windows Explorer or run:
 ```powershell
-# Default run (use current directory as install root)
+pwsh -NoProfile .\install.ps1 -Menu
+```
+Includes easy presets:
+- **Standard Installation**: Executes full configuration defined in `.env`.
+- **Modern PHP Stack**: Fast setup for PHP 8.2, 8.3, and 8.4 with Apache and Composer.
+- **Single PHP Version**: Interactively pick and install one specific PHP version.
+- **Web Server Only**: Install or reconfigure Apache HTTPD or Nginx server.
+- **Custom Wizard**: Step-by-step interactive configuration prompt.
+- **Pre-Flight Check**: Verify downloaded package cache and archive integrity in `tmp/`.
+
+#### 2. CLI Automation Examples:
+```powershell
+# Standard automated run based on .env
 pwsh -NoProfile .\install.ps1
 
-# Download PHP only (set environment flags before running)
-$env:DOWNLOAD_PHP = '1'
-pwsh -NoProfile .\install.ps1
+# Pre-flight package verification (check cached archives without installing)
+pwsh -NoProfile .\install.ps1 -Check
 
-# Install Composer and register PHP path
-$env:INSTALL_COMPOSER = '1'
-$env:REGISTER_PATH_PHP = '1'
-pwsh -NoProfile .\install.ps1
+# Install modern PHP versions only
+pwsh -NoProfile .\install.ps1 -PhpVersions "v8.2, v8.3, v8.4" -InstallApache:$true
 
-# Set a custom install directory
-$env:INSTALL_DIR = 'C:\web\php-apache'
-pwsh -NoProfile .\install.ps1
+# Single PHP version install
+pwsh -NoProfile .\install.ps1 -PhpVersions "v8.2" -InstallApache:$false
+
+# Safe simulation / dry-run with WhatIf
+pwsh -NoProfile .\install.ps1 -WhatIf
 ```
 
 Notes:
@@ -92,31 +105,39 @@ Useful links:
 - PowerShell releases: https://github.com/PowerShell/PowerShell/releases
 - winget (Windows Package Manager): https://learn.microsoft.com/windows/package-manager/
 
-## Update script
+## Upstream Package Update Helper
 
-A small reference PowerShell script is included to check and update package names listed in `source/php-versions.json` and `source/baseUrl.json`.
+A modular PowerShell script and batch launcher to check and update package versions defined in `source/php-versions.json` and `source/baseUrl.json`.
 
-- Script path: `Update-Base.ps1`
-- Purpose: discover latest package filenames on windows.php.net, xdebug.org, and apachelounge.com and optionally write them back to `source/php-versions.json` and `source/baseUrl.json`.
+- **Script**: [Update-Base.ps1](file:///d:/Program/web/php-apache-installer/Update-Base.ps1)
+- **Batch Launcher**: [Update-Base.bat](file:///d:/Program/web/php-apache-installer/Update-Base.bat)
+- **Supported Sources**: `windows.php.net` (PHP releases & PECL Imagick), `xdebug.org`, `apachelounge.com` (Apache HTTPD), and `github.com/nginx` (Nginx releases).
 
-Usage examples:
-
+### Quick Interactive Menu:
+Double-click `Update-Base.bat` or run:
 ```powershell
-# Check for updates (no write)
-pwsh -NoProfile .\Update-Base.ps1
-
-# Apply detected updates to source/php-versions.json and source/baseUrl.json (default prefers 64-bit packages)
-pwsh -NoProfile .\Update-Base.ps1 -Update
-
-# Apply updates but do NOT prefer x64 (choose any matching architecture)
-pwsh -NoProfile .\Update-Base.ps1 -Update -Prefer64:$false
+pwsh -NoProfile .\Update-Base.ps1 -Menu
 ```
 
-Notes:
-- The script reads `source/baseUrl.json` to locate PHP and Xdebug directories and checks https://www.apachelounge.com/download/ to detect newer `APACHE_BASE` filenames.
-- When run with `-Update` the script will update `APACHE_BASE` directly in `source/baseUrl.json`.
-- By default the script prefers x64 (x86_64) binaries when available. Use `-Prefer64:$false` to disable.
-- This script is a convenience/reference tool; review changes before committing.
+### CLI Automation Examples:
+```powershell
+# Check for updates across all packages (dry-run detection table)
+pwsh -NoProfile .\Update-Base.ps1
+
+# Apply detected updates to source manifests
+pwsh -NoProfile .\Update-Base.ps1 -Update
+
+# Check/update specific components only (apache, nginx, php, xdebug, imagick)
+pwsh -NoProfile .\Update-Base.ps1 -Component apache -Update
+pwsh -NoProfile .\Update-Base.ps1 -Component nginx -NginxBranch mainline -Update
+
+# Target specific PHP version(s)
+pwsh -NoProfile .\Update-Base.ps1 -PhpVersion 8.2 -Component php
+pwsh -NoProfile .\Update-Base.ps1 -PhpVersion 82,84 -Update
+
+# Safe execution with WhatIf
+pwsh -NoProfile .\Update-Base.ps1 -Update -WhatIf
+```
 
 ## Portable Control Panel (XAMPP-Style)
 
