@@ -146,6 +146,7 @@ function Get-InstallerConfig {
     $apacheDir = Join-Path $installRoot "apache"
     $nginxDir = Join-Path $installRoot "nginx"
     $phpDir = Join-Path $installRoot "PHP"
+    $phpBinDir = Join-Path $phpDir "bin"
 
     $rawHtdocs = Resolve-StringOption 'HtdocsDir' 'HTDOCS_DIR' ''
     $defaultHtdocs = Join-Path $apacheDir "htdocs"
@@ -198,6 +199,7 @@ function Get-InstallerConfig {
         ApacheDir    = $apacheDir
         NginxDir     = $nginxDir
         PhpDir       = $phpDir
+        PhpBinDir    = $phpBinDir
         HtdocsDir    = $htdocsDir
         TmpDir       = $tmpDir
         Versions     = $versionList
@@ -285,6 +287,7 @@ function Show-InstallerBanner {
     Write-Output "Apache install path: $($Config.ApacheDir)"
     Write-Output "Nginx install path: $($Config.NginxDir)"
     Write-Output "PHP install path: $($Config.PhpDir)"
+    Write-Output "PHP bin path: $($Config.PhpBinDir)"
     Write-Output "PHP versions: $($Config.Versions -join ', ')"
     Write-Output "Download PHP packages: $($Config.Flags.DownloadPhp)"
     Write-Output "Install Xdebug: $($Config.Flags.InstallXdebug)"
@@ -918,16 +921,16 @@ function Install-NginxServer {
 function Register-EnvironmentPaths {
     [CmdletBinding(SupportsShouldProcess = $true)]
     param(
-        [Parameter(Mandatory = $true)][string]$PathName,
-        [Parameter(Mandatory = $true)][string[]]$PathsToRegister
+        [Parameter(Mandatory = $true)][string[]]$PathsToRegister,
+        [string]$PhpDir = ''
     )
 
     $validPaths = @($PathsToRegister | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
     if ($validPaths.Count -gt 0) {
         $combined = $validPaths -join ";"
-        if ($PSCmdlet.ShouldProcess("Environment Variable %$PathName%", "Register paths: $combined")) {
-            Write-Output "Registering environment paths to %$PathName%: $combined"
-            Register-Path-Web $PathName $combined
+        if ($PSCmdlet.ShouldProcess("User Environment Variable 'Path'", "Register entries: $combined")) {
+            Write-Output "Registering entries to User Path: $combined"
+            Register-Path-Web -PathsToRegister $validPaths -PhpDir $PhpDir
         }
     }
 }
@@ -982,10 +985,15 @@ function Invoke-Installer {
             -Config $config `
             -Manifests $manifests `
             -SourceDir $sourceDir
+    }
 
-        if ($installedPath -and $config.Flags.RegisterPhpPath) {
-            $pathsToRegister += $installedPath
-        }
+    # Step 3.1: Create PHP bin directory and generate CLI binary links (php{ver} & latest php)
+    Write-Host ""
+    Write-Host ">>> Deploying PHP CLI links in bin ($($config.PhpBinDir))..." -ForegroundColor Cyan
+    Deploy-PhpBinLinks -PhpDir $config.PhpDir -PhpBinDir $config.PhpBinDir -Manifests $manifests
+
+    if ($config.Flags.RegisterPhpPath -and (Test-Path -LiteralPath $config.PhpBinDir)) {
+        $pathsToRegister += $config.PhpBinDir
     }
 
     # Step 4: Install and configure Apache HTTPD
@@ -1018,8 +1026,8 @@ function Invoke-Installer {
     # Step 7: System environment path registration
     if ($pathsToRegister.Count -gt 0) {
         Write-Host ""
-        Write-Host ">>> [Phase 7/7] Registering System Environment Paths (%$($config.PathEnvName)%)..." -ForegroundColor Cyan
-        Register-EnvironmentPaths -PathName $config.PathEnvName -PathsToRegister $pathsToRegister
+        Write-Host ">>> [Phase 7/7] Registering User Environment Paths..." -ForegroundColor Cyan
+        Register-EnvironmentPaths -PathsToRegister $pathsToRegister -PhpDir $config.PhpDir
     }
 
     Write-Host ""
@@ -1027,6 +1035,7 @@ function Invoke-Installer {
     Write-Host " INSTALLATION COMPLETED SUCCESSFULLY!" -ForegroundColor Green
     Write-Host "=================================================================================" -ForegroundColor Green
     Write-Host " Installed PHP     : $($config.Versions -join ', ')" -ForegroundColor White
+    Write-Host " PHP CLI Bin (PATH): $($config.PhpBinDir)" -ForegroundColor White
     if ($config.Flags.InstallApache) {
         Write-Host " Apache Server     : $($config.ApacheDir)" -ForegroundColor White
     }
@@ -1058,6 +1067,7 @@ function Show-ConfigSummary {
     Write-Host " Apache Directory  : $($Config.ApacheDir)"
     Write-Host " Nginx Directory   : $($Config.NginxDir)"
     Write-Host " PHP Directory     : $($Config.PhpDir)"
+    Write-Host " PHP Bin Directory : $($Config.PhpBinDir)"
     Write-Host " Document Root     : $($Config.HtdocsDir)"
     Write-Host " Temporary Path    : $($Config.TmpDir)"
     Write-Host " PHP Build Type    : $($Config.BuildType)"

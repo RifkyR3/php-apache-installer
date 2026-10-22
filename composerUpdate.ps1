@@ -12,7 +12,7 @@ $installDir = Path-Cleaning ${PWD} $env:INSTALL_DIR;
 
 $phpDir = "${installDir}\PHP\";
 
-$basePhpVersion = "v5.4, v5.5, v5.6, v7.0, v7.1, v7.2, v7.3, v7.4, v8.0, v8.1, v8.2, v8.3";
+$basePhpVersion = "v5.4, v5.5, v5.6, v7.0, v7.1, v7.2, v7.3, v7.4, v8.0, v8.1, v8.2, v8.3, v8.4, v8.5";
 $whatToInstall = [string]::IsNullOrWhiteSpace($env:INSTALL_PHP_VERSION) ? $basePhpVersion : [string]$env:INSTALL_PHP_VERSION;
 $whatToInstall = $whatToInstall.Replace('"', '').Replace("'", "").Split(",");
 
@@ -48,3 +48,7 @@ foreach ($version in $whatToInstall) {
     $composerInstall = "${phpDirExtract}\composer.bat";
     Copy-Item .\source\composer.bat $composerInstall;
 }
+
+Write-Host ""
+Write-Host ">>> Refreshing PHP & Composer CLI links in bin..." -ForegroundColor Cyan
+Deploy-PhpBinLinks -PhpDir $phpDir
