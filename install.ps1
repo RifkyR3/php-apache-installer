@@ -987,9 +987,9 @@ function Invoke-Installer {
             -SourceDir $sourceDir
     }
 
-    # Step 3.1: Create PHP bin directory and generate CLI binary links (php{ver} & latest php)
+    # Step 3.1: Create PHP bin directory and generate CLI binary links (php, php-cgi & composer)
     Write-Host ""
-    Write-Host ">>> Deploying PHP CLI links in bin ($($config.PhpBinDir))..." -ForegroundColor Cyan
+    Write-Host ">>> Deploying PHP, PHP-CGI & Composer CLI links in bin ($($config.PhpBinDir))..." -ForegroundColor Cyan
     Deploy-PhpBinLinks -PhpDir $config.PhpDir -PhpBinDir $config.PhpBinDir -Manifests $manifests
 
     if ($config.Flags.RegisterPhpPath -and (Test-Path -LiteralPath $config.PhpBinDir)) {
