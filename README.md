@@ -11,7 +11,7 @@ Requirements:
 
 - **OS**: Windows 10 or later (recommended). Some helper tools such as the Windows Package Manager (`winget`) and the bundled `curl.exe` are available on recent Windows builds.
 - **PowerShell**: Recommended: PowerShell 7+ (`pwsh`). Windows PowerShell 5.1 (`powershell`) usually works for most operations but examples use `pwsh`.
-- **Internet access**: Required to download PHP, Xdebug, Imagick, Apache/Nginx, Composer and other packages.
+- **Internet access**: Required to download PHP, Xdebug, Imagick, Apache/Nginx, Composer, PIE and other packages.
 - **Download tool**: `curl` is used by the scripts for robust downloads (Windows 10+ includes `curl.exe`). If `curl` is not available, install it or ensure an equivalent download tool is present in PATH.
 - **Archive extraction**: The scripts use PowerShell's `Expand-Archive` to extract ZIP files; 7-Zip is not required.
 - **Windows Package Manager (winget)**: Optional — used only when importing the Visual C++ Redistributables via [source/winget-VCRedist.json](source/winget-VCRedist.json). If you don't have `winget`, install the appropriate Visual C++ Redistributables manually.
@@ -154,7 +154,18 @@ Manage Apache and PHP portably without administrative privileges or Windows serv
   - `.\control.ps1 status` : Check running status and active PIDs.
   - `.\control.ps1 open` : Open browser to default dashboard (`http://localhost:8082`).
   - `.\control.ps1 htdocs` : Open `apache/htdocs` folder in Windows Explorer.
-  - `.\control.ps1 shell [version]` : Launch isolated shell with PHP (default 8.2) and Composer in PATH.
+  - `.\control.ps1 shell [version]` : Launch isolated shell with PHP (default 8.2), Composer, and PIE in PATH.
   - `.\control.ps1 sync` : Synchronize paths from `.env` (or defaults) to Apache config.
   - `.\control.ps1 gui` : Open native Windows Forms GUI control panel.
 
+
+## PHP PIE (PHP Installer for Extensions)
+
+[PIE](https://github.com/php/pie) is the official modern extension installer replacing PECL:
+
+- **Version-specific shims in `PHP\bin\`**:
+  - `pie84 install <vendor/package>` : Installs extension specifically into PHP 8.4.
+  - `pie82 install <vendor/package>` : Installs extension specifically into PHP 8.2.
+  - `pie -V` : Runs PIE using the latest active PHP version.
+- **Dedicated Updater**:
+  - `pwsh -NoProfile .\pieUpdate.ps1` : Always downloads the freshest upstream `pie.phar`, updates all installed PHP versions ($\ge 8.1$), and refreshes CLI links.

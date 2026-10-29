@@ -6,6 +6,7 @@
 !install.ps1
 !install.bat
 !composerUpdate.ps1
+!pieUpdate.ps1
 !source/
 !source/*
 !source/*/*

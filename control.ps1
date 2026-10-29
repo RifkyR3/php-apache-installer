@@ -706,6 +706,7 @@ Write-Host '===================================================' -ForegroundColo
 Write-Host ' Portable Web Shell (Session isolated)' -ForegroundColor White
 Write-Host ' PHP Version : ' -NoNewline; php -v | Select-Object -First 1
 Write-Host ' Composer    : ' -NoNewline; if (Test-Path '$targetPhp\composer.bat') { & '$targetPhp\composer.bat' --version } else { Write-Host 'None' }
+Write-Host ' PIE         : ' -NoNewline; if (Test-Path '$targetPhp\pie.bat') { & '$targetPhp\pie.bat' -V } else { Write-Host 'None' }
 Write-Host ' DocumentRoot: $($Paths.Htdocs)' -ForegroundColor DarkGray
 Write-Host '===================================================' -ForegroundColor Cyan
 "@

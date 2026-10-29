@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Automated installer and configurator for PHP, Apache, Nginx, Composer, Xdebug, and Imagick on Windows.
+    Automated installer and configurator for PHP, Apache, Nginx, Composer, PIE, Xdebug, and Imagick on Windows.
 
 .DESCRIPTION
     Orchestrates the download, extraction, configuration, and path registration of multiple PHP versions
@@ -35,6 +35,7 @@ param(
     [Nullable[bool]]$InstallXdebug,
     [Nullable[bool]]$InstallImagick,
     [Nullable[bool]]$InstallComposer,
+    [Nullable[bool]]$InstallPie,
     [Nullable[bool]]$InstallApache,
     [Nullable[bool]]$DownloadApache,
     [Nullable[bool]]$InstallNginx,
@@ -131,6 +132,7 @@ function Get-InstallerConfig {
         InstallImagick     = Resolve-BooleanOption 'InstallImagick'     'INSTALL_IMAGICK'     $true
         RegisterPhpPath    = Resolve-BooleanOption 'RegisterPhpPath'    'REGISTER_PATH_PHP'   $false
         InstallComposer    = Resolve-BooleanOption 'InstallComposer'    'INSTALL_COMPOSER'    $true
+        InstallPie         = Resolve-BooleanOption 'InstallPie'         'INSTALL_PIE'         $true
         InstallApache      = Resolve-BooleanOption 'InstallApache'      'INSTALL_APACHE'      $true
         DownloadApache     = Resolve-BooleanOption 'DownloadApache'     'DOWNLOAD_APACHE'     $true
         RegisterApachePath = Resolve-BooleanOption 'RegisterApachePath' 'REGISTER_PATH_APACHE' $false
@@ -373,6 +375,7 @@ function Show-InstallerBanner {
     Write-Output "Install Xdebug: $($Config.Flags.InstallXdebug)"
     Write-Output "Install Imagick: $($Config.Flags.InstallImagick)"
     Write-Output "Install Composer: $($Config.Flags.InstallComposer)"
+    Write-Output "Install PIE: $($Config.Flags.InstallPie)"
     Write-Output "Install Apache: $($Config.Flags.InstallApache)"
     Write-Output "Download Apache packages: $($Config.Flags.DownloadApache)"
     Write-Output "Register Apache path: $($Config.Flags.RegisterApachePath)"
@@ -421,6 +424,16 @@ function Download-InstallerPackages {
         Write-Host "  -> Verifying Composer binaries..." -ForegroundColor DarkGray
         Save-PackageFile -Url $baseUrl.COMPOSER -TargetDir $tmpDir -FileName "composer.phar" -ForceDownload $false
         Save-PackageFile -Url $baseUrl.COMPOSER_LTS -TargetDir $tmpDir -FileName "composer-lts.phar" -ForceDownload $false
+    }
+
+    # Download PIE package if enabled (always freshly downloaded at the start, purging cached copy)
+    if ($Config.Flags.InstallPie) {
+        Write-Host "  -> Downloading latest PIE binary (always fresh upstream release)..." -ForegroundColor DarkGray
+        $pieTmpFile = Join-Path $tmpDir "pie.phar"
+        if (Test-Path -LiteralPath $pieTmpFile) {
+            Remove-Item -LiteralPath $pieTmpFile -Force -ErrorAction SilentlyContinue
+        }
+        Save-PackageFile -Url $baseUrl.PIE -TargetDir $tmpDir -FileName "pie.phar" -ForceDownload $true
     }
 
     # Download PHP and extension packages
@@ -821,6 +834,28 @@ function Install-PhpVersion {
         Write-Host "  -> [6/6] Skipping Composer (disabled)" -ForegroundColor DarkGray
     }
 
+    # Configure PIE if enabled (requires PHP 8.1+)
+    if ($Config.Flags.InstallPie) {
+        $pieMinVer = 81
+        if ([int]$versionAlias -ge $pieMinVer) {
+            Write-Host "  -> [7/7] Deploying PIE (pie${versionAlias}.bat)..." -ForegroundColor DarkGray
+            $pieSource = Join-Path $Config.TmpDir "pie.phar"
+            if (Test-Path -LiteralPath $pieSource) {
+                Copy-Item -LiteralPath $pieSource -Destination (Join-Path $phpExtractDir "pie.phar") -Force
+            }
+
+            $pieBatTemplate = Join-Path $SourceDir "pie.bat"
+            if (Test-Path -LiteralPath $pieBatTemplate) {
+                Copy-Item -LiteralPath $pieBatTemplate -Destination (Join-Path $phpExtractDir "pie.bat") -Force
+                Copy-Item -LiteralPath $pieBatTemplate -Destination (Join-Path $phpExtractDir "pie${versionAlias}.bat") -Force
+            }
+        } else {
+            Write-Host "  -> [7/7] Skipping PIE (requires PHP 8.1+)" -ForegroundColor DarkGray
+        }
+    } else {
+        Write-Host "  -> [7/7] Skipping PIE (disabled)" -ForegroundColor DarkGray
+    }
+
     Write-Host "  [OK] PHP $Version installed successfully in $phpExtractDir" -ForegroundColor Green
     return $phpExtractDir
 }
@@ -1068,9 +1103,9 @@ function Invoke-Installer {
             -SourceDir $sourceDir
     }
 
-    # Step 3.1: Create PHP bin directory and generate CLI binary links (php, php-cgi & composer)
+    # Step 3.1: Create PHP bin directory and generate CLI binary links (php, php-cgi, composer & pie)
     Write-Host ""
-    Write-Host ">>> Deploying PHP, PHP-CGI & Composer CLI links in bin ($($config.PhpBinDir))..." -ForegroundColor Cyan
+    Write-Host ">>> Deploying PHP, PHP-CGI, Composer & PIE CLI links in bin ($($config.PhpBinDir))..." -ForegroundColor Cyan
     Deploy-PhpBinLinks -PhpDir $config.PhpDir -PhpBinDir $config.PhpBinDir -Manifests $manifests
 
     if ($config.Flags.RegisterPhpPath -and (Test-Path -LiteralPath $config.PhpBinDir)) {
@@ -1159,6 +1194,7 @@ function Show-ConfigSummary {
     Write-Host "   Install Apache      : $($Config.Flags.InstallApache)"
     Write-Host "   Install Nginx       : $($Config.Flags.InstallNginx)"
     Write-Host "   Install Composer    : $($Config.Flags.InstallComposer)"
+    Write-Host "   Install PIE         : $($Config.Flags.InstallPie)"
     Write-Host "   Install Xdebug      : $($Config.Flags.InstallXdebug)"
     Write-Host "   Install Imagick     : $($Config.Flags.InstallImagick)"
     Write-Host "   Install VC Redist   : $($Config.Flags.InstallVCRedist)"
@@ -1192,6 +1228,11 @@ function Invoke-PreFlightCheck {
     if ($Config.Flags.InstallComposer) {
         $items.Add([PSCustomObject]@{ Target = "Composer"; File = "composer.phar" })
         $items.Add([PSCustomObject]@{ Target = "Composer-LTS"; File = "composer-lts.phar" })
+    }
+
+    # PHP PIE
+    if ($Config.Flags.InstallPie) {
+        $items.Add([PSCustomObject]@{ Target = "PHP PIE"; File = "pie.phar" })
     }
 
     # PHP versions
@@ -1320,6 +1361,9 @@ function Invoke-CustomInstallWizard {
     $askComposer = Read-Host "Install Composer (latest & LTS)? (Y/n)"
     $doComposer = ($askComposer -notmatch '^(n|no)$')
 
+    $askPie = Read-Host "Install PHP PIE (Extension installer for PHP 8.1+)? (Y/n)"
+    $doPie = ($askPie -notmatch '^(n|no)$')
+
     $askXdebug = Read-Host "Install Xdebug Extension? (Y/n)"
     $doXdebug = ($askXdebug -notmatch '^(n|no)$')
 
@@ -1333,6 +1377,7 @@ function Invoke-CustomInstallWizard {
         InstallApache   = $doApache
         InstallNginx    = $doNginx
         InstallComposer = $doComposer
+        InstallPie      = $doPie
         InstallXdebug   = $doXdebug
         InstallImagick  = $doImagick
         InstallVCRedist = $doVc
@@ -1396,13 +1441,14 @@ function Show-InteractiveInstallMenu {
                 Pause-InstallerConsole
             }
             '2' {
-                $confirm = Read-Host "Install Modern Stack (PHP 8.2, 8.3, 8.4 + Apache HTTPD + Composer)? (y/N)"
+                $confirm = Read-Host "Install Modern Stack (PHP 8.2, 8.3, 8.4 + Apache HTTPD + Composer & PIE)? (y/N)"
                 if ($confirm -match '^(y|yes)$') {
                     $modernParams = @{
                         PhpVersions     = 'v8.2, v8.3, v8.4'
                         InstallApache   = $true
                         InstallNginx    = $false
                         InstallComposer = $true
+                        InstallPie      = $true
                     }
                     Invoke-Installer -BoundParameters $modernParams -RootDirectory $RootDirectory
                 } else {

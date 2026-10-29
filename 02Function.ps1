@@ -308,6 +308,8 @@ function Deploy-PhpBinLinks {
         $hasCgi = Test-Path -LiteralPath $cgiPath
         $pharPath = Join-Path $folder.FullName "composer.phar"
         $hasComposer = Test-Path -LiteralPath $pharPath
+        $piePath = Join-Path $folder.FullName "pie.phar"
+        $hasPie = Test-Path -LiteralPath $piePath
 
         $parsedVer = if ($aliasToVersion.ContainsKey($alias)) {
             $aliasToVersion[$alias]
@@ -331,6 +333,8 @@ function Deploy-PhpBinLinks {
             HasCgi      = $hasCgi
             PharPath    = $pharPath
             HasComposer = $hasComposer
+            PiePath     = $piePath
+            HasPie      = $hasPie
             Version     = $parsedVer
         })
     }
@@ -365,7 +369,7 @@ function Deploy-PhpBinLinks {
         Set-Content -LiteralPath $shPath  -Value $shContent  -Encoding UTF8 -NoNewline
     }
 
-    if ($PSCmdlet.ShouldProcess($PhpBinDir, "Generate CLI links for PHP, PHP-CGI and Composer")) {
+    if ($PSCmdlet.ShouldProcess($PhpBinDir, "Generate CLI links for PHP, PHP-CGI, Composer and PIE")) {
         # Track active shim names to clean obsolete ones
         $activeNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
         foreach ($v in $sortedVersions) {
@@ -375,18 +379,21 @@ function Deploy-PhpBinLinks {
                 [void]$activeNames.Add("php$($v.Alias)-cgi")
             }
             if ($v.HasComposer) { [void]$activeNames.Add("composer$($v.Alias)") }
+            if ($v.HasPie) { [void]$activeNames.Add("pie$($v.Alias)") }
         }
         [void]$activeNames.Add("php")
         if ($latestVersion.HasCgi) {
             [void]$activeNames.Add("php-cgi")
         }
         if ($latestVersion.HasComposer) { [void]$activeNames.Add("composer") }
+        if ($latestVersion.HasPie) { [void]$activeNames.Add("pie") }
 
         Get-ChildItem -LiteralPath $PhpBinDir -File -ErrorAction SilentlyContinue | Where-Object {
             $baseName = [System.IO.Path]::GetFileNameWithoutExtension($_.Name)
             $isShim = ($_.Extension -in ".cmd", ".bat") -or ($_.Extension -eq "")
             $isTargetShim = $baseName.StartsWith("php", [System.StringComparison]::OrdinalIgnoreCase) -or
-                            $baseName.StartsWith("composer", [System.StringComparison]::OrdinalIgnoreCase)
+                            $baseName.StartsWith("composer", [System.StringComparison]::OrdinalIgnoreCase) -or
+                            $baseName.StartsWith("pie", [System.StringComparison]::OrdinalIgnoreCase)
             $isTargetShim -and (-not $activeNames.Contains($baseName) -and -not $activeNames.Contains($_.Name))
         } | Remove-Item -Force -ErrorAction SilentlyContinue
 
@@ -405,6 +412,11 @@ function Deploy-PhpBinLinks {
                 Set-ShimFile -ShimName "composer$($verInfo.Alias)" -TargetExe $verInfo.ExePath -TargetPhar $verInfo.PharPath
                 Write-Output "Created CLI link: composer$($verInfo.Alias) -> $($verInfo.ExePath) ($($verInfo.PharPath))"
             }
+
+            if ($verInfo.HasPie) {
+                Set-ShimFile -ShimName "pie$($verInfo.Alias)" -TargetExe $verInfo.ExePath -TargetPhar $verInfo.PiePath
+                Write-Output "Created CLI link: pie$($verInfo.Alias) -> $($verInfo.ExePath) ($($verInfo.PiePath))"
+            }
         }
 
         # Create 'php', 'php-cgi', and 'composer' links pointing ONLY to the latest installed PHP version
@@ -421,7 +433,12 @@ function Deploy-PhpBinLinks {
             Write-Output "Created latest CLI link: composer -> $($latestVersion.ExePath) (PHP $($latestVersion.Version))"
         }
 
-        Write-Host "  [OK] Generated PHP, PHP-CGI & Composer CLI links in $PhpBinDir" -ForegroundColor Green
+        if ($latestVersion.HasPie) {
+            Set-ShimFile -ShimName "pie" -TargetExe $latestVersion.ExePath -TargetPhar $latestVersion.PiePath
+            Write-Output "Created latest CLI link: pie -> $($latestVersion.ExePath) (PHP $($latestVersion.Version))"
+        }
+
+        Write-Host "  [OK] Generated PHP, PHP-CGI, Composer & PIE CLI links in $PhpBinDir" -ForegroundColor Green
         Write-Host "       - PHP version links      : $($sortedVersions.ForEach({ "php$($_.Alias)" }) -join ', ')" -ForegroundColor DarkGray
         $cgiVersions = @($sortedVersions | Where-Object { $_.HasCgi })
         if ($cgiVersions.Count -gt 0) {
@@ -431,12 +448,19 @@ function Deploy-PhpBinLinks {
         if ($compVersions.Count -gt 0) {
             Write-Host "       - Composer version links : $($compVersions.ForEach({ "composer$($_.Alias)" }) -join ', ')" -ForegroundColor DarkGray
         }
+        $pieVersions = @($sortedVersions | Where-Object { $_.HasPie })
+        if ($pieVersions.Count -gt 0) {
+            Write-Host "       - PIE version links      : $($pieVersions.ForEach({ "pie$($_.Alias)" }) -join ', ')" -ForegroundColor DarkGray
+        }
         Write-Host "       - Latest PHP link        : php -> $($latestVersion.ExePath)" -ForegroundColor Green
         if ($latestVersion.HasCgi) {
             Write-Host "       - Latest PHP-CGI link    : php-cgi -> $($latestVersion.CgiPath)" -ForegroundColor Green
         }
         if ($latestVersion.HasComposer) {
             Write-Host "       - Latest Composer link   : composer -> $($latestVersion.PharPath)" -ForegroundColor Green
+        }
+        if ($latestVersion.HasPie) {
+            Write-Host "       - Latest PIE link        : pie -> $($latestVersion.PiePath)" -ForegroundColor Green
         }
     }
 }
