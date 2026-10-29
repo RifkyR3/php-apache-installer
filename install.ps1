@@ -238,46 +238,126 @@ function Save-PackageFile {
         [Parameter(Mandatory = $true)][string]$Url,
         [Parameter(Mandatory = $true)][string]$TargetDir,
         [Parameter(Mandatory = $true)][string]$FileName,
-        [bool]$ForceDownload = $false
+        [bool]$ForceDownload = $false,
+        [string]$ExpectedHash = '',
+        [int]$MaxRetries = 3
     )
 
     $targetPath = Join-Path $TargetDir $FileName
-    if ($ForceDownload -or (-not (Test-Path -LiteralPath $targetPath))) {
-        if ($PSCmdlet.ShouldProcess($targetPath, "Download from $Url")) {
-            if ($ForceDownload) {
-                Write-Output "Downloading $FileName to $TargetDir"
-                Download-File $Url $targetPath
-            }
-            else {
-                Check-Download $Url $TargetDir $FileName
+    $needDownload = $ForceDownload -or (-not (Test-Path -LiteralPath $targetPath))
+
+    # If file exists, verify cached copy before skipping download
+    if (-not $needDownload) {
+        if (-not [string]::IsNullOrWhiteSpace($ExpectedHash)) {
+            if (-not (Test-FileChecksum -Path $targetPath -ExpectedHash $ExpectedHash)) {
+                Write-Warning "Cached file '$FileName' failed SHA-256 verification (corrupted or outdated). Removing..."
+                Remove-Item -LiteralPath $targetPath -Force -ErrorAction SilentlyContinue
+                $needDownload = $true
             }
         }
-        else {
-            return
+        elseif ($FileName.EndsWith('.zip', [System.StringComparison]::OrdinalIgnoreCase)) {
+            $zipValid = $true
+            try {
+                $za = [System.IO.Compression.ZipFile]::OpenRead($targetPath)
+                $null = $za.Entries
+                $za.Dispose()
+            }
+            catch {
+                $zipValid = $false
+            }
+            if (-not $zipValid) {
+                Write-Warning "Cached file '$FileName' is an invalid zip archive. Removing..."
+                Remove-Item -LiteralPath $targetPath -Force -ErrorAction SilentlyContinue
+                $needDownload = $true
+            }
         }
-    }
-    else {
-        Write-Output "Already exists: $targetPath"
     }
 
-    if (-not (Test-Path -LiteralPath $targetPath)) {
+    # If cached file is valid, skip download early
+    if (-not $needDownload) {
+        if (-not [string]::IsNullOrWhiteSpace($ExpectedHash)) {
+            Write-Output "Already exists & verified (SHA-256): $targetPath"
+        }
+        else {
+            Write-Output "Already exists: $targetPath"
+        }
         return
     }
 
-    # Validate zip integrity if the downloaded file is an archive
-    if ($FileName.EndsWith('.zip', [System.StringComparison]::OrdinalIgnoreCase)) {
+    if (-not $PSCmdlet.ShouldProcess($targetPath, "Download from $Url")) {
+        return
+    }
+
+    # Execute download with automatic retry on network failure, corrupt archive, or SHA-256 mismatch
+    $attempt = 0
+    $downloadSuccess = $false
+
+    while ($attempt -lt $MaxRetries -and -not $downloadSuccess) {
+        $attempt++
+        if ($attempt -gt 1) {
+            Write-Host "  -> Attempt $attempt/${MaxRetries}: Re-downloading $FileName..." -ForegroundColor Yellow
+        } else {
+            Write-Output "Downloading $FileName to $TargetDir"
+        }
+
         try {
-            $zipArchive = [System.IO.Compression.ZipFile]::OpenRead($targetPath)
-            $null = $zipArchive.Entries
-            $zipArchive.Dispose()
+            Download-File $Url $targetPath
         }
         catch {
-            Remove-Item -LiteralPath $targetPath -Force -ErrorAction SilentlyContinue
-            throw "Downloaded file $FileName is not a valid zip archive (server may have returned an HTML error page or corrupted content): $Url"
+            if ($attempt -ge $MaxRetries) {
+                throw "Download failed after $MaxRetries attempts: $Url. Error: $_"
+            }
+            Write-Warning "Download attempt $attempt failed: $_. Retrying..."
+            Start-Sleep -Seconds (2 * $attempt)
+            continue
         }
+
+        if (-not (Test-Path -LiteralPath $targetPath)) {
+            continue
+        }
+
+        # Validate post-download checksum if hash is specified
+        if (-not [string]::IsNullOrWhiteSpace($ExpectedHash)) {
+            if (-not (Test-FileChecksum -Path $targetPath -ExpectedHash $ExpectedHash)) {
+                Remove-Item -LiteralPath $targetPath -Force -ErrorAction SilentlyContinue
+                if ($attempt -lt $MaxRetries) {
+                    Write-Warning "Downloaded file '$FileName' failed SHA-256 verification (corrupted or mismatch). Auto-retrying ($attempt/$MaxRetries)..."
+                    Start-Sleep -Seconds (2 * $attempt)
+                    continue
+                } else {
+                    throw "Downloaded file $FileName failed SHA-256 checksum verification after $MaxRetries attempts: $Url"
+                }
+            }
+            Write-Host "  -> SHA-256 checksum verified for $FileName" -ForegroundColor Green
+        }
+
+        # Validate zip integrity if the downloaded file is an archive
+        if ($FileName.EndsWith('.zip', [System.StringComparison]::OrdinalIgnoreCase)) {
+            $zipValid = $true
+            try {
+                $zipArchive = [System.IO.Compression.ZipFile]::OpenRead($targetPath)
+                $null = $zipArchive.Entries
+                $zipArchive.Dispose()
+            }
+            catch {
+                $zipValid = $false
+            }
+
+            if (-not $zipValid) {
+                Remove-Item -LiteralPath $targetPath -Force -ErrorAction SilentlyContinue
+                if ($attempt -lt $MaxRetries) {
+                    Write-Warning "Downloaded file '$FileName' is an invalid zip archive. Auto-retrying ($attempt/$MaxRetries)..."
+                    Start-Sleep -Seconds (2 * $attempt)
+                    continue
+                } else {
+                    throw "Downloaded file $FileName is not a valid zip archive after $MaxRetries attempts: $Url"
+                }
+            }
+        }
+
+        $downloadSuccess = $true
     }
 }
-
 function Show-InstallerBanner {
     [CmdletBinding()]
     param([PSCustomObject]$Config)
@@ -358,6 +438,7 @@ function Download-InstallerPackages {
         $phpName     = Get-ObjectProperty $phpData "name"
         $phpDownload = Get-ObjectProperty $phpData "download"
         $phpBaseFile = if ($Config.BuildType -eq "NTS") { $phpName } else { $phpName.Replace("-nts", "") }
+        $phpSha      = if ($Config.BuildType -eq "NTS") { Get-ObjectProperty $phpData "sha256" } else { $null }
         $phpUrl = if ($phpDownload -eq "release") {
             "$($baseUrl.PHP_RELEASE)$phpBaseFile"
         } else {
@@ -366,7 +447,7 @@ function Download-InstallerPackages {
 
         Write-Host "  -> [$vIdx/$vCount] Checking PHP $version package ($phpBaseFile)..." -ForegroundColor DarkGray
         try {
-            Save-PackageFile -Url $phpUrl -TargetDir $tmpDir -FileName $phpBaseFile -ForceDownload $Config.Flags.DownloadPhp
+            Save-PackageFile -Url $phpUrl -TargetDir $tmpDir -FileName $phpBaseFile -ForceDownload $Config.Flags.DownloadPhp -ExpectedHash $phpSha
         }
         catch {
             Write-Error "Failed to download PHP $version`: $_"
@@ -1097,11 +1178,11 @@ function Invoke-PreFlightCheck {
 
     Write-Host ""
     Write-Host "=================================================================================" -ForegroundColor Cyan
-    Write-Host " PRE-FLIGHT VERIFICATION: PACKAGE CACHE STATUS" -ForegroundColor White
+    Write-Host " PRE-FLIGHT VERIFICATION: PACKAGE CACHE & INTEGRITY STATUS" -ForegroundColor White
     Write-Host " Target Directory: $($Config.TmpDir)" -ForegroundColor DarkGray
     Write-Host "=================================================================================" -ForegroundColor Cyan
 
-    $formatString = "{0,-16} | {1,-38} | {2,-10} | {3}"
+    $formatString = "{0,-16} | {1,-38} | {2,-16} | {3}"
     Write-Host ([string]::Format($formatString, "Target", "Package File Name", "Status", "Size")) -ForegroundColor DarkGray
     Write-Host ("-" * 85) -ForegroundColor DarkGray
 
@@ -1120,7 +1201,8 @@ function Invoke-PreFlightCheck {
             $phpName = Get-ObjectProperty $entry "name"
             if ($phpName) {
                 $phpBase = if ($Config.BuildType -eq "NTS") { $phpName } else { $phpName.Replace("-nts", "") }
-                $items.Add([PSCustomObject]@{ Target = "PHP $ver"; File = $phpBase })
+                $phpSha  = if ($Config.BuildType -eq "NTS") { Get-ObjectProperty $entry "sha256" } else { $null }
+                $items.Add([PSCustomObject]@{ Target = "PHP $ver"; File = $phpBase; ExpectedHash = $phpSha })
             }
             if ($Config.Flags.InstallXdebug) {
                 $xd = Get-ObjectProperty $entry "xdebug"
@@ -1151,8 +1233,10 @@ function Invoke-PreFlightCheck {
         $items.Add([PSCustomObject]@{ Target = "Nginx Server"; File = $Config.NginxBase })
     }
 
+    $validCount = 0
     $readyCount = 0
     $missingCount = 0
+    $corruptCount = 0
 
     foreach ($item in $items) {
         $fullPath = Join-Path $Config.TmpDir $item.File
@@ -1162,12 +1246,47 @@ function Invoke-PreFlightCheck {
         $sizeStr = "-"
 
         if ($exists) {
-            $status = "READY"
-            $statusColor = "Green"
             $fileInfo = Get-Item -LiteralPath $fullPath
             $sizeMB = [math]::Round($fileInfo.Length / 1MB, 2)
             $sizeStr = "$sizeMB MB"
-            $readyCount++
+
+            $expectedHash = if ($item.PSObject.Properties['ExpectedHash']) { $item.ExpectedHash } else { $null }
+
+            if (-not [string]::IsNullOrWhiteSpace($expectedHash)) {
+                $hashMatch = Test-FileChecksum -Path $fullPath -ExpectedHash $expectedHash
+                if ($hashMatch) {
+                    $status = "VALID (SHA-256)"
+                    $statusColor = "Green"
+                    $validCount++
+                } else {
+                    $status = "HASH MISMATCH"
+                    $statusColor = "Red"
+                    $corruptCount++
+                }
+            } elseif ($item.File.EndsWith(".zip", [System.StringComparison]::OrdinalIgnoreCase)) {
+                $zipValid = $true
+                try {
+                    $za = [System.IO.Compression.ZipFile]::OpenRead($fullPath)
+                    $null = $za.Entries
+                    $za.Dispose()
+                } catch {
+                    $zipValid = $false
+                }
+
+                if ($zipValid) {
+                    $status = "READY"
+                    $statusColor = "Green"
+                    $readyCount++
+                } else {
+                    $status = "CORRUPT ZIP"
+                    $statusColor = "Red"
+                    $corruptCount++
+                }
+            } else {
+                $status = "READY"
+                $statusColor = "Green"
+                $readyCount++
+            }
         } else {
             $missingCount++
         }
@@ -1176,7 +1295,7 @@ function Invoke-PreFlightCheck {
     }
 
     Write-Host ("-" * 85) -ForegroundColor DarkGray
-    Write-Host "Total Packages Checked: $($items.Count) | Ready: $readyCount | Missing: $missingCount" -ForegroundColor Cyan
+    Write-Host "Total Packages Checked: $($items.Count) | Valid (SHA-256): $validCount | Ready: $readyCount | Missing: $missingCount | Corrupt: $corruptCount" -ForegroundColor Cyan
 }
 
 function Invoke-CustomInstallWizard {
@@ -1383,4 +1502,4 @@ if ($finalAction -eq 'menu') {
     Invoke-PreFlightCheck -Config $config -Manifests $manifests
 } else {
     Invoke-Installer -BoundParameters $PSBoundParameters -RootDirectory $ScriptRoot
-}
+}

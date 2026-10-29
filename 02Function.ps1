@@ -57,6 +57,33 @@ function Check-Download {
     }
 }
 
+function Test-FileChecksum {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$ExpectedHash,
+        [string]$Algorithm = "SHA256"
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return $false
+    }
+
+    if ([string]::IsNullOrWhiteSpace($ExpectedHash)) {
+        return $true
+    }
+
+    try {
+        $actualHash = (Get-FileHash -LiteralPath $Path -Algorithm $Algorithm).Hash
+        return $actualHash.Equals($ExpectedHash.Trim(), [System.StringComparison]::OrdinalIgnoreCase)
+    }
+    catch {
+        Write-Warning "Failed to compute file hash for ${Path}: $_"
+        return $false
+    }
+}
+
 function Path-Cleaning($default, $path) {
     $string = [string]::IsNullOrWhiteSpace($path) ? [string]$default : [string]$path;
     $string = $string.Replace("/", "\").Split("\");

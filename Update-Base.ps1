@@ -231,6 +231,81 @@ function Invoke-RemoteListing {
     return $uniqueFiles
 }
 
+function Get-RemotePhpChecksumMap {
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [string]$BaseUrlRelease = 'https://windows.php.net/downloads/releases/',
+        [switch]$Quiet
+    )
+
+    $cacheKey = "PHP_CHECKSUMS_MAP"
+    if ($script:ListingCache.ContainsKey($cacheKey)) {
+        return $script:ListingCache[$cacheKey]
+    }
+
+    $map = [hashtable]::new([System.StringComparer]::OrdinalIgnoreCase)
+
+    # 1. Attempt to fetch metadata from official releases.json
+    $jsonUrl = "$($BaseUrlRelease.TrimEnd('/'))/releases.json"
+    try {
+        if (-not $Quiet) {
+            Write-Host "Fetching PHP release checksum metadata: $jsonUrl" -ForegroundColor DarkGray
+        }
+        $headers = @{ 'User-Agent' = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+        $resp = Invoke-RestMethod -Uri $jsonUrl -Headers $headers -TimeoutSec 10 -ErrorAction Stop
+        if ($null -ne $resp) {
+            foreach ($prop in $resp.PSObject.Properties) {
+                $branchData = $prop.Value
+                if ($branchData -is [PSCustomObject]) {
+                    foreach ($variantProp in $branchData.PSObject.Properties) {
+                        $variant = $variantProp.Value
+                        if ($variant -is [PSCustomObject] -and $variant.PSObject.Properties['zip']) {
+                            $zipObj = $variant.zip
+                            if ($zipObj.PSObject.Properties['path'] -and $zipObj.PSObject.Properties['sha256']) {
+                                $filePath = [string]$zipObj.path
+                                $fileSha = [string]$zipObj.sha256
+                                if (-not [string]::IsNullOrWhiteSpace($filePath) -and -not [string]::IsNullOrWhiteSpace($fileSha)) {
+                                    $map[$filePath.Trim()] = $fileSha.Trim().ToLowerInvariant()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    catch {
+        if (-not $Quiet) {
+            Write-Host "releases.json fetch skipped or unavailable: $_" -ForegroundColor DarkGray
+        }
+    }
+
+    # 2. Supplementary fallback: sha256sum.txt (for older or archived releases)
+    $shaUrl = "$($BaseUrlRelease.TrimEnd('/'))/sha256sum.txt"
+    try {
+        $headers = @{ 'User-Agent' = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+        $shaText = (Invoke-WebRequest -Uri $shaUrl -Headers $headers -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop).Content
+        if (-not [string]::IsNullOrWhiteSpace($shaText)) {
+            foreach ($line in ($shaText -split "\r?\n")) {
+                if ($line -match '^([a-fA-F0-9]{64})\s+[*]?(\S+)') {
+                    $hash = $Matches[1].ToLowerInvariant()
+                    $fname = [System.IO.Path]::GetFileName($Matches[2])
+                    if (-not $map.ContainsKey($fname)) {
+                        $map[$fname] = $hash
+                    }
+                }
+            }
+        }
+    }
+    catch {
+        # sha256sum.txt fallback optional
+    }
+
+    $script:ListingCache[$cacheKey] = $map
+    return $map
+}
+
 function Get-RemoteNginxReleases {
     [CmdletBinding()]
     param(
@@ -404,6 +479,31 @@ function Find-LatestPhpPackage {
     } -Descending | Select-Object -First 1
 }
 
+function Get-PhpPackageSha256 {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$FileName,
+        [hashtable]$RemoteChecksumMap = $null,
+        [string]$TmpDir = ''
+    )
+
+    if ($null -ne $RemoteChecksumMap -and $RemoteChecksumMap.ContainsKey($FileName)) {
+        return [string]$RemoteChecksumMap[$FileName]
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($TmpDir)) {
+        $localPath = Join-Path $TmpDir $FileName
+        if (Test-Path -LiteralPath $localPath) {
+            try {
+                return (Get-FileHash -LiteralPath $localPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            }
+            catch { }
+        }
+    }
+
+    return $null
+}
+
 function Find-LatestXdebugPackage {
     [CmdletBinding()]
     param(
@@ -553,8 +653,11 @@ function Show-UpdateReport {
         $curr = if ($c.Current) { $c.Current } else { "(empty)" }
         $latest = $c.Latest
 
+        $currDisp = if ($field -eq 'sha256' -and $curr.Length -gt 16) { $curr.Substring(0, 12) + "..." } else { $curr }
+        $latestDisp = if ($field -eq 'sha256' -and $latest.Length -gt 16) { $latest.Substring(0, 12) + "..." } else { $latest }
+
         $color = if ($IsApplied) { 'Green' } else { 'Yellow' }
-        Write-Host ([string]::Format($formatString, $comp, $target, $field, $curr, $latest)) -ForegroundColor $color
+        Write-Host ([string]::Format($formatString, $comp, $target, $field, $currDisp, $latestDisp)) -ForegroundColor $color
     }
 
     Write-Host ("-" * 105) -ForegroundColor DarkGray
@@ -596,6 +699,7 @@ function Invoke-BaseUpdater {
     if ($needsPhp -or $needsXdebug -or $needsImagick) {
         $phpArchiveFiles = if ($needsPhp) { Invoke-RemoteListing -Url $baseUrl.PHP -Quiet:$Quiet } else { @() }
         $phpReleaseFiles = if ($needsPhp) { Invoke-RemoteListing -Url $baseUrl.PHP_RELEASE -Quiet:$Quiet } else { @() }
+        $phpChecksumMap  = if ($needsPhp) { Get-RemotePhpChecksumMap -BaseUrlRelease $baseUrl.PHP_RELEASE -Quiet:$Quiet } else { @{} }
         $xdebugFiles     = if ($needsXdebug) { Invoke-RemoteListing -Url 'https://xdebug.org/download' -Quiet:$Quiet } else { @() }
 
         $imagickBaseUrl = if ($baseUrl.PSObject.Properties['IMAGICK']) { $baseUrl.IMAGICK } else { 'https://windows.php.net/downloads/pecl/releases/imagick/' }
@@ -624,17 +728,39 @@ function Invoke-BaseUpdater {
                 $searchFiles = if ($downloadType -eq 'release') { $phpReleaseFiles } else { $phpArchiveFiles }
                 $latestPhpName = Find-LatestPhpPackage -Files $searchFiles -PhpMajorMinor $phpMajorMinor -Type $type -Prefer64 $Config.Prefer64
 
-                if ($latestPhpName -and $latestPhpName -ne $currentPhpName) {
-                    $changes.Add([PSCustomObject]@{
-                        Component = 'PHP'
-                        Key       = $versionKey
-                        Field     = 'name'
-                        File      = $Config.ResolvedJsonPath
-                        Current   = $currentPhpName
-                        Latest    = $latestPhpName
-                    })
-                    if ($Action -eq 'update') {
-                        $phpVersions.$versionKey.name = $latestPhpName
+                if ($latestPhpName) {
+                    $tmpFolder = Join-Path $Config.ScriptRoot "tmp"
+                    $latestSha = Get-PhpPackageSha256 -FileName $latestPhpName -RemoteChecksumMap $phpChecksumMap -TmpDir $tmpFolder
+                    $currentSha = if ($entry.PSObject.Properties['sha256']) { $entry.sha256 } else { $null }
+
+                    # 1. Update package filename if newer version discovered
+                    if ($latestPhpName -ne $currentPhpName) {
+                        $changes.Add([PSCustomObject]@{
+                            Component = 'PHP'
+                            Key       = $versionKey
+                            Field     = 'name'
+                            File      = $Config.ResolvedJsonPath
+                            Current   = $currentPhpName
+                            Latest    = $latestPhpName
+                        })
+                        if ($Action -eq 'update') {
+                            $phpVersions.$versionKey.name = $latestPhpName
+                        }
+                    }
+
+                    # 2. Update SHA-256 hash if available and different from current manifest
+                    if (-not [string]::IsNullOrWhiteSpace($latestSha) -and ($latestSha -ne $currentSha)) {
+                        $changes.Add([PSCustomObject]@{
+                            Component = 'PHP'
+                            Key       = $versionKey
+                            Field     = 'sha256'
+                            File      = $Config.ResolvedJsonPath
+                            Current   = $currentSha
+                            Latest    = $latestSha
+                        })
+                        if ($Action -eq 'update') {
+                            $phpVersions.$versionKey.sha256 = $latestSha
+                        }
                     }
                 }
             }
