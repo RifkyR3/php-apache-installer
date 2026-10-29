@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Automated installer and configurator for PHP, Apache, Nginx, Composer, PIE, Xdebug, and Imagick on Windows.
+    Automated installer and configurator for PHP, Apache, Nginx, Composer, PIE, Xdebug, Imagick, and RdKafka on Windows.
 
 .DESCRIPTION
     Orchestrates the download, extraction, configuration, and path registration of multiple PHP versions
@@ -34,6 +34,7 @@ param(
     [Nullable[bool]]$DownloadPhp,
     [Nullable[bool]]$InstallXdebug,
     [Nullable[bool]]$InstallImagick,
+    [Nullable[bool]]$InstallRdkafka,
     [Nullable[bool]]$InstallComposer,
     [Nullable[bool]]$InstallPie,
     [Nullable[bool]]$InstallApache,
@@ -130,6 +131,7 @@ function Get-InstallerConfig {
         DownloadPhp        = Resolve-BooleanOption 'DownloadPhp'        'DOWNLOAD_PHP'        $true
         InstallXdebug      = Resolve-BooleanOption 'InstallXdebug'      'INSTALL_XDEBUG'      $true
         InstallImagick     = Resolve-BooleanOption 'InstallImagick'     'INSTALL_IMAGICK'     $true
+        InstallRdkafka     = Resolve-BooleanOption 'InstallRdkafka'     'INSTALL_RDKAFKA'     $true
         RegisterPhpPath    = Resolve-BooleanOption 'RegisterPhpPath'    'REGISTER_PATH_PHP'   $false
         InstallComposer    = Resolve-BooleanOption 'InstallComposer'    'INSTALL_COMPOSER'    $true
         InstallPie         = Resolve-BooleanOption 'InstallPie'         'INSTALL_PIE'         $true
@@ -231,6 +233,7 @@ function Get-SourceManifests {
         BaseConfig  = Load-JsonFile "php-config-base.json"
         Xdebug      = Load-JsonFile "php-config-xdebug.json"
         Imagick     = Load-JsonFile "php-config-imagick.json"
+        Rdkafka     = Load-JsonFile "php-config-rdkafka.json"
     }
 }
 
@@ -374,6 +377,7 @@ function Show-InstallerBanner {
     Write-Output "Download PHP packages: $($Config.Flags.DownloadPhp)"
     Write-Output "Install Xdebug: $($Config.Flags.InstallXdebug)"
     Write-Output "Install Imagick: $($Config.Flags.InstallImagick)"
+    Write-Output "Install rdkafka: $($Config.Flags.InstallRdkafka)"
     Write-Output "Install Composer: $($Config.Flags.InstallComposer)"
     Write-Output "Install PIE: $($Config.Flags.InstallPie)"
     Write-Output "Install Apache: $($Config.Flags.InstallApache)"
@@ -499,6 +503,24 @@ function Download-InstallerPackages {
                 }
             }
         }
+
+        # Download rdkafka if enabled
+        $rdkafkaProp = Get-ObjectProperty $phpData "rdkafka"
+        if ($Config.Flags.InstallRdkafka -and -not [string]::IsNullOrWhiteSpace($rdkafkaProp)) {
+            $rdkafkaFile = if ($Config.BuildType -eq "NTS") { $rdkafkaProp } else { $rdkafkaProp.Replace("-nts-", "-ts-") }
+            if ($rdkafkaFile -match '^php_rdkafka-([^-]+)-') {
+                $rdkafkaVer = $Matches[1]
+                $rdkafkaUrl = "$($baseUrl.RDKAFKA)$rdkafkaVer/$rdkafkaFile"
+                Write-Host "     * Checking rdkafka for PHP $version ($rdkafkaFile)..." -ForegroundColor DarkGray
+                try {
+                    Save-PackageFile -Url $rdkafkaUrl -TargetDir $tmpDir -FileName $rdkafkaFile -ForceDownload $false
+                }
+                catch {
+                    Write-Error "Failed to download rdkafka $rdkafkaFile`: $_"
+                    throw "Installation halted due to failed rdkafka download."
+                }
+            }
+        }
     }
 
     # Download Apache packages if enabled
@@ -546,7 +568,8 @@ function Configure-PhpIni {
         [Parameter(Mandatory = $true)][PSCustomObject]$Manifests,
         [bool]$EnableXdebug = $false,
         [string]$XdebugDllPath = "",
-        [bool]$EnableImagick = $false
+        [bool]$EnableImagick = $false,
+        [bool]$EnableRdkafka = $false
     )
 
     if (-not (Test-Path -LiteralPath $IniTemplatePath)) {
@@ -587,6 +610,14 @@ function Configure-PhpIni {
     $imagickDirectives = Get-ObjectProperty $Manifests.Imagick $ConfigType
     if ($EnableImagick -and $imagickDirectives) {
         $imagickBlock = $imagickDirectives -join "`r`n"
+        $content += "`r`n" + $imagickBlock
+    }
+
+    # 5. Append rdkafka directives if enabled
+    $rdkafkaDirectives = Get-ObjectProperty $Manifests.Rdkafka $ConfigType
+    if ($EnableRdkafka -and $rdkafkaDirectives) {
+        $rdkafkaBlock = $rdkafkaDirectives -join "`r`n"
+        $content += "`r`n" + $rdkafkaBlock
         $content += "`r`n" + $imagickBlock
     }
 
@@ -788,8 +819,40 @@ function Install-PhpVersion {
         Write-Host "  -> [3/6] Skipping Imagick (disabled or not configured)" -ForegroundColor DarkGray
     }
 
+    # Extract and copy rdkafka DLLs if enabled
+    $rdkafkaProp = Get-ObjectProperty $phpData "rdkafka"
+    $hasRdkafka = $Config.Flags.InstallRdkafka -and -not [string]::IsNullOrWhiteSpace($rdkafkaProp)
+    if ($hasRdkafka) {
+        $rdkafkaFileName = if ($Config.BuildType -eq "NTS") { $rdkafkaProp } else { $rdkafkaProp.Replace("-nts-", "-ts-") }
+        $rdkafkaZip = Join-Path $Config.TmpDir $rdkafkaFileName
+
+        if (Test-Path -LiteralPath $rdkafkaZip) {
+            Write-Host "  -> [3.5/6] Extracting and deploying rdkafka extension ($rdkafkaFileName)..." -ForegroundColor DarkGray
+            $rdkafkaTmp = Join-Path $Config.TmpDir "rdkafka_$versionAlias"
+            if (Test-Path -LiteralPath $rdkafkaTmp) { Remove-Item -LiteralPath $rdkafkaTmp -Recurse -Force }
+            New-Item -ItemType Directory -Path $rdkafkaTmp | Out-Null
+
+            Expand-Archive -LiteralPath $rdkafkaZip -DestinationPath $rdkafkaTmp
+
+            # Copy php_rdkafka.dll to ext/
+            $extDll = Join-Path $rdkafkaTmp "php_rdkafka.dll"
+            if (Test-Path -LiteralPath $extDll) {
+                Copy-Item -LiteralPath $extDll -Destination (Join-Path $phpExtractDir "ext\php_rdkafka.dll") -Force
+            }
+
+            # Copy dependency DLLs (librdkafka.dll, librdkafka++.dll, etc.) to PHP root folder
+            Get-ChildItem -LiteralPath $rdkafkaTmp -Filter "*.dll" | Where-Object { $_.Name -ne "php_rdkafka.dll" } | ForEach-Object {
+                Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $phpExtractDir $_.Name) -Force
+            }
+
+            Remove-Item -LiteralPath $rdkafkaTmp -Recurse -Force
+        }
+    } else {
+        Write-Host "  -> [3.5/6] Skipping rdkafka (disabled or not configured)" -ForegroundColor DarkGray
+    }
+
     # Configure php.ini
-    Write-Host "  -> [4/6] Configuring php.ini (enabling extensions, base settings, xdebug, imagick)..." -ForegroundColor DarkGray
+    Write-Host "  -> [4/6] Configuring php.ini (enabling extensions, base settings, xdebug, imagick, rdkafka)..." -ForegroundColor DarkGray
     $iniTemplate = Join-Path $phpExtractDir "php.ini-development"
     $targetIni = Join-Path $phpExtractDir "php.ini"
     Configure-PhpIni `
@@ -801,7 +864,8 @@ function Install-PhpVersion {
         -Manifests $Manifests `
         -EnableXdebug $Config.Flags.InstallXdebug `
         -XdebugDllPath $xdebugExtPath `
-        -EnableImagick $hasImagick
+        -EnableImagick $hasImagick `
+        -EnableRdkafka $hasRdkafka
 
     # Check and disable duplicate initiations after Configure-PhpIni finishes
     Disable-DuplicatePhpIniDirectives -IniPath $targetIni
@@ -1259,6 +1323,13 @@ function Invoke-PreFlightCheck {
                     $items.Add([PSCustomObject]@{ Target = "Imagick $ver"; File = $imBase })
                 }
             }
+            if ($Config.Flags.InstallRdkafka) {
+                $rd = Get-ObjectProperty $entry "rdkafka"
+                if ($rd) {
+                    $rdBase = if ($Config.BuildType -eq "NTS") { $rd } else { $rd.Replace("-nts-", "-ts-") }
+                    $items.Add([PSCustomObject]@{ Target = "rdkafka $ver"; File = $rdBase })
+                }
+            }
         }
     }
 
@@ -1368,6 +1439,8 @@ function Invoke-CustomInstallWizard {
     $doXdebug = ($askXdebug -notmatch '^(n|no)$')
 
     $askImagick = Read-Host "Install Imagick Extension? (Y/n)"
+    $askRdkafka = Read-Host "Install Rdkafka Extension? (Y/n)"
+    $doRdkafka = ($askRdkafka -notmatch '^(n|no)$')
     $doImagick = ($askImagick -notmatch '^(n|no)$')
 
     $askVc = Read-Host "Install Visual C++ Redistributable via winget? (Y/n)"
@@ -1380,6 +1453,7 @@ function Invoke-CustomInstallWizard {
         InstallPie      = $doPie
         InstallXdebug   = $doXdebug
         InstallImagick  = $doImagick
+        InstallRdkafka  = $doRdkafka
         InstallVCRedist = $doVc
     }
 
@@ -1484,6 +1558,7 @@ function Show-InteractiveInstallMenu {
                     DownloadPhp     = $false
                     InstallXdebug   = $false
                     InstallImagick  = $false
+                    InstallRdkafka  = $false
                     InstallComposer = $false
                     PhpVersions     = ""
                 }

@@ -3,6 +3,7 @@
     "name": "php-5.4.45-nts-Win32-VC9-x86.zip",
     "xdebug": "php_xdebug-2.4.1-5.4-vc9-nts.dll",
     "imagick": "php_imagick-3.4.2-5.4-nts-vc9-x86.zip",
+    "rdkafka": "",
     "alias": "54",
     "config": "old",
     "sha256": "63da6fd7c73c25eef1baec7099c3de348390671f9b2e61b74a8ab300fa4eab92"
@@ -11,6 +12,7 @@
     "name": "php-5.5.38-nts-Win32-VC11-x64.zip",
     "xdebug": "php_xdebug-2.5.5-5.5-vc11-nts-x86_64.dll",
     "imagick": "php_imagick-3.4.3-5.5-nts-vc11-x64.zip",
+    "rdkafka": "",
     "alias": "55",
     "config": "old",
     "sha256": "abdf2fefcd7d1daf75d689e309e8571879b15d4b61726546e4e064f96167387a"
@@ -19,6 +21,7 @@
     "name": "php-5.6.40-nts-Win32-VC11-x64.zip",
     "xdebug": "php_xdebug-2.5.5-5.6-vc11-nts-x86_64.dll",
     "imagick": "php_imagick-3.4.3-5.6-nts-vc11-x64.zip",
+    "rdkafka": "",
     "alias": "56",
     "config": "old",
     "sha256": "3d7668280fa4b16f70705539ba1e4ea17eef344c81e82881cbeca26fb7f181f1"
@@ -27,6 +30,7 @@
     "name": "php-7.0.33-nts-Win32-VC14-x64.zip",
     "xdebug": "php_xdebug-2.6.1-7.0-vc14-nts-x86_64.dll",
     "imagick": "php_imagick-3.4.3-7.0-nts-vc14-x64.zip",
+    "rdkafka": "php_rdkafka-3.0.5-7.0-nts-vc14-x64.zip",
     "alias": "70",
     "config": "old",
     "sha256": "bba39bde5b0bd50efadc11e2716c7528669945f9d1397d707486e401e67e89fb"
@@ -35,6 +39,7 @@
     "name": "php-7.1.33-nts-Win32-VC14-x64.zip",
     "xdebug": "php_xdebug-2.9.8-7.1-vc14-nts-x86_64.dll",
     "imagick": "php_imagick-3.4.4-7.1-nts-vc14-x64.zip",
+    "rdkafka": "php_rdkafka-3.1.2-7.1-nts-vc14-x64.zip",
     "alias": "71",
     "config": "old",
     "sha256": "071438be5bbaee8b34894ddba7852b6040991a3c853ab8141efcb1b6655bbbef"
@@ -43,6 +48,7 @@
     "name": "php-7.2.34-nts-Win32-VC15-x64.zip",
     "xdebug": "php_xdebug-3.1.6-7.2-vc15-nts-x86_64.dll",
     "imagick": "php_imagick-3.8.1-7.2-nts-vc15-x64.zip",
+    "rdkafka": "php_rdkafka-6.0.5-7.2-nts-vc15-x64.zip",
     "alias": "72",
     "config": "new",
     "sha256": "3c673eab656e26fd6bc3ad27fe71169ad888b04e21d63d3c6b3151d5ed216563"
@@ -51,6 +57,7 @@
     "name": "php-7.3.33-nts-Win32-VC15-x64.zip",
     "xdebug": "php_xdebug-3.1.6-7.3-vc15-nts-x86_64.dll",
     "imagick": "php_imagick-3.8.1-7.3-nts-vc15-x64.zip",
+    "rdkafka": "php_rdkafka-6.0.5-7.3-nts-vc15-x64.zip",
     "alias": "73",
     "config": "new",
     "sha256": "5eaf3cad80e678623f222a42c99bcefcc60eea359d407fb51e805afdb3b13e5e"
@@ -59,6 +66,7 @@
     "name": "php-7.4.33-nts-Win32-vc15-x64.zip",
     "xdebug": "php_xdebug-3.1.6-7.4-vc15-nts-x86_64.dll",
     "imagick": "php_imagick-3.8.1-7.4-nts-vc15-x64.zip",
+    "rdkafka": "php_rdkafka-6.0.5-7.4-nts-vc15-x64.zip",
     "alias": "74",
     "config": "new",
     "sha256": "14ae3250d4447c8ccfc4c45a70d90adfbcd61e728d85f0be56a7ddf8f9c8aace"
@@ -67,6 +75,7 @@
     "name": "php-8.0.30-nts-Win32-vs16-x64.zip",
     "xdebug": "php_xdebug-3.5.3-8.0-nts-vs16-x86_64.dll",
     "imagick": "php_imagick-3.8.1-8.0-nts-vs16-x64.zip",
+    "rdkafka": "php_rdkafka-6.0.5-8.0-nts-vs16-x64.zip",
     "alias": "80",
     "config": "new",
     "sha256": "dfb70498ffa2c617f2f655a155564697e3c9cca41709938fd1a5997d1d5b0785"
@@ -75,6 +84,7 @@
     "name": "php-8.1.34-nts-Win32-vs16-x64.zip",
     "xdebug": "php_xdebug-3.5.3-8.1-nts-vs16-x86_64.dll",
     "imagick": "php_imagick-3.8.1-8.1-nts-vs16-x64.zip",
+    "rdkafka": "php_rdkafka-6.0.5-8.1-nts-vs16-x64.zip",
     "alias": "81",
     "config": "new",
     "download": "release",
@@ -84,6 +94,7 @@
     "name": "php-8.2.35-1-nts-Win32-vs16-x64.zip",
     "xdebug": "php_xdebug-3.5.3-8.2-nts-vs16-x86_64.dll",
     "imagick": "php_imagick-3.8.1-8.2-nts-vs16-x64.zip",
+    "rdkafka": "php_rdkafka-6.0.5-8.2-nts-vs16-x64.zip",
     "alias": "82",
     "config": "new",
     "download": "release",
@@ -93,6 +104,7 @@
     "name": "php-8.3.36-1-nts-Win32-vs16-x64.zip",
     "xdebug": "php_xdebug-3.5.3-8.3-nts-vs16-x86_64.dll",
     "imagick": "php_imagick-3.8.1-8.3-nts-vs16-x64.zip",
+    "rdkafka": "php_rdkafka-6.0.5-8.3-nts-vs16-x64.zip",
     "alias": "83",
     "config": "new",
     "download": "release",
@@ -102,6 +114,7 @@
     "name": "php-8.4.27-1-nts-Win32-vs17-x64.zip",
     "xdebug": "php_xdebug-3.5.3-8.4-nts-vs17-x86_64.dll",
     "imagick": "php_imagick-3.8.1-8.4-nts-vs17-x64.zip",
+    "rdkafka": "php_rdkafka-6.0.5-8.4-nts-vs17-x64.zip",
     "alias": "84",
     "config": "new",
     "download": "release",
@@ -111,6 +124,7 @@
     "name": "php-8.5.12-1-nts-Win32-vs17-x64.zip",
     "xdebug": "php_xdebug-3.5.3-8.5-nts-vs17-x86_64.dll",
     "imagick": "php_imagick-3.8.1-8.5-nts-vs17-x64.zip",
+    "rdkafka": "php_rdkafka-6.0.5-8.5-nts-vs17-x64.zip",
     "alias": "85",
     "config": "new",
     "download": "release",

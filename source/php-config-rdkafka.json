@@ -1,0 +1,10 @@
+{
+    "old": [
+        "[rdkafka]",
+        "extension = php_rdkafka.dll"
+    ],
+    "new": [
+        "[rdkafka]",
+        "extension = php_rdkafka.dll"
+    ]
+}

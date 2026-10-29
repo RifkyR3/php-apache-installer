@@ -19,7 +19,7 @@
     Shortcut switch equivalent to -Action 'menu'. Launches the interactive console menu.
 
 .PARAMETER Component
-    Filters detection to a specific package component: 'all', 'php', 'apache', 'nginx', 'xdebug', or 'imagick'.
+    Filters detection to a specific package component: 'all', 'php', 'apache', 'nginx', 'xdebug', 'imagick', or 'rdkafka'.
     Defaults to 'all'.
 
 .PARAMETER PhpVersion
@@ -74,7 +74,7 @@ param(
     [switch]$Update,
     [switch]$Menu,
 
-    [ValidateSet('all', 'php', 'apache', 'nginx', 'xdebug', 'imagick')]
+    [ValidateSet('all', 'php', 'apache', 'nginx', 'xdebug', 'imagick', 'rdkafka')]
     [string]$Component = 'all',
 
     [string[]]$PhpVersion,
@@ -216,7 +216,7 @@ function Invoke-RemoteListing {
             } else {
                 New-Object System.Uri((New-Object System.Uri($baseUri)), $href)
             }
-            $fileName = [System.IO.Path]::GetFileName($uri.AbsoluteUri)
+            $fileName = [System.IO.Path]::GetFileName($uri.AbsoluteUri.TrimEnd('/'))
             if (-not [string]::IsNullOrWhiteSpace($fileName)) {
                 $files.Add($fileName)
             }
@@ -408,6 +408,48 @@ function Get-RemoteImagickFiles {
 }
 
 # ==============================================================================
+function Get-RemoteRdkafkaFiles {
+    [CmdletBinding()]
+    param(
+        [string]$RdkafkaBaseUrl,
+        [switch]$Quiet
+    )
+
+    $cacheKey = "RDKAFKA_FILES_$RdkafkaBaseUrl"
+    if ($script:ListingCache.ContainsKey($cacheKey)) {
+        return $script:ListingCache[$cacheKey]
+    }
+
+    $dirs = Invoke-RemoteListing -Url $RdkafkaBaseUrl -Quiet:$Quiet | Where-Object { $_ -match '^\d+\.\d+' }
+    $sortedDirs = @($dirs | Sort-Object {
+        if ($_ -match '^(\d+\.\d+(\.\d+)?)') {
+            try { [version]$Matches[1] } catch { [version]'0.0.0' }
+        } else {
+            [version]'0.0.0'
+        }
+    } -Descending)
+
+    # Scan directories (top 15 versions cover all supported PHP branches)
+    $targetDirs = $sortedDirs | Select-Object -First 15
+    $rdkafkaFiles = [System.Collections.Generic.List[string]]::new()
+
+    foreach ($vDir in $targetDirs) {
+        $subUrl = "$RdkafkaBaseUrl$vDir"
+        if (-not $subUrl.EndsWith('/')) { $subUrl += '/' }
+        try {
+            $subFiles = Invoke-RemoteListing -Url $subUrl -Quiet:$Quiet | Where-Object { $_ -match '\.zip$' }
+            foreach ($sf in $subFiles) { $rdkafkaFiles.Add($sf) }
+        }
+        catch {
+            continue
+        }
+    }
+
+    $unique = @($rdkafkaFiles | Sort-Object -Unique)
+    $script:ListingCache[$cacheKey] = $unique
+    return $unique
+}
+
 # 3. Version Parsing & Matchers
 # ==============================================================================
 
@@ -473,6 +515,8 @@ function Find-LatestPhpPackage {
         if ($candidates64.Count -gt 0) { $candidates = $candidates64 }
     }
 
+    $candidates = @($candidates | Where-Object { $_ -notmatch '(?i)(alpha|beta|rc)' })
+
     return $candidates | Sort-Object {
         $v = Get-VersionFromString -FileName $_ -PrefixPattern '^php-(\d+\.\d+\.\d+)'
         if ($null -eq $v) { [version]'0.0.0' } else { $v }
@@ -527,6 +571,8 @@ function Find-LatestXdebugPackage {
         if ($candidates64.Count -gt 0) { $candidates = $candidates64 }
     }
 
+    $candidates = @($candidates | Where-Object { $_ -notmatch '(?i)(alpha|beta|rc)' })
+
     return $candidates | Sort-Object {
         $v = Get-VersionFromString -FileName $_ -PrefixPattern '^php_xdebug-(\d+\.\d+\.\d+)-'
         if ($null -eq $v) { [version]'0.0.0' } else { $v }
@@ -542,7 +588,8 @@ function Find-LatestImagickPackage {
         [bool]$Prefer64 = $true
     )
 
-    $pattern = "^php_imagick-(\d+\.\d+\.\d+.*?)-$PhpMajorMinor-.*-$Type-.*\.zip$"
+    $escapedVer = [regex]::Escape($PhpMajorMinor)
+    $pattern = "^php_imagick-(\d+\.\d+\.\d+.*?)-$escapedVer(?:-.*)?-$Type-.*\.zip$"
     $candidates = @($Files | Where-Object { $_ -match $pattern })
     if ($candidates.Count -eq 0) { return $null }
 
@@ -551,8 +598,37 @@ function Find-LatestImagickPackage {
         if ($candidates64.Count -gt 0) { $candidates = $candidates64 }
     }
 
+    $candidates = @($candidates | Where-Object { $_ -notmatch '(?i)(alpha|beta|rc)' })
+
     return $candidates | Sort-Object {
         $v = Get-VersionFromString -FileName $_ -PrefixPattern '^php_imagick-(\d+\.\d+\.\d+)'
+        if ($null -eq $v) { [version]'0.0.0' } else { $v }
+    } -Descending | Select-Object -First 1
+}
+
+function Find-LatestRdkafkaPackage {
+    [CmdletBinding()]
+    param(
+        [string[]]$Files,
+        [string]$PhpMajorMinor,
+        [string]$Type,
+        [bool]$Prefer64 = $true
+    )
+
+    $escapedVer = [regex]::Escape($PhpMajorMinor)
+    $pattern = "^php_rdkafka-(\d+\.\d+\.\d+.*?)-$escapedVer(?:-.*)?-$Type-.*\.zip$"
+    $candidates = @($Files | Where-Object { $_ -match $pattern })
+    if ($candidates.Count -eq 0) { return $null }
+
+    if ($Prefer64) {
+        $candidates64 = @($candidates | Where-Object { $_ -match 'x86_64|x64' })
+        if ($candidates64.Count -gt 0) { $candidates = $candidates64 }
+    }
+
+    $candidates = @($candidates | Where-Object { $_ -notmatch '(?i)(alpha|beta|rc)' })
+
+    return $candidates | Sort-Object {
+        $v = Get-VersionFromString -FileName $_ -PrefixPattern '^php_rdkafka-(\d+\.\d+\.\d+)'
         if ($null -eq $v) { [version]'0.0.0' } else { $v }
     } -Descending | Select-Object -First 1
 }
@@ -572,6 +648,8 @@ function Find-LatestApachePackage {
         $win64Candidates = @($candidates | Where-Object { $_ -match 'Win64' })
         if ($win64Candidates.Count -gt 0) { $candidates = $win64Candidates }
     }
+
+    $candidates = @($candidates | Where-Object { $_ -notmatch '(?i)(alpha|beta|rc)' })
 
     return $candidates | Sort-Object {
         $v = Get-VersionFromString -FileName $_ -PrefixPattern '^httpd-(\d+\.\d+\.\d+)'
@@ -609,6 +687,8 @@ function Find-LatestNginxPackage {
         })
         if ($mainline.Count -gt 0) { $candidates = $mainline }
     }
+
+    $candidates = @($candidates | Where-Object { $_ -notmatch '(?i)(alpha|beta|rc)' })
 
     return $candidates | Sort-Object {
         $v = Get-VersionFromString -FileName $_ -PrefixPattern '^nginx-(\d+\.\d+\.\d+)\.zip$'
@@ -677,7 +757,7 @@ function Invoke-BaseUpdater {
     param(
         [Parameter(Mandatory = $true)][PSCustomObject]$Config,
         [ValidateSet('check', 'update')][string]$Action = 'check',
-        [ValidateSet('all', 'php', 'apache', 'nginx', 'xdebug', 'imagick')][string]$Component = 'all',
+        [ValidateSet('all', 'php', 'apache', 'nginx', 'xdebug', 'imagick', 'rdkafka')][string]$Component = 'all',
         [string[]]$PhpVersion = $null,
         [switch]$Quiet,
         [switch]$PassThru
@@ -691,12 +771,13 @@ function Invoke-BaseUpdater {
 
     $changes = [System.Collections.Generic.List[PSCustomObject]]::new()
 
-    # --- Step 1: Scan PHP Versions (PHP, Xdebug, Imagick) ---
+    # --- Step 1: Scan PHP Versions (PHP, Xdebug, Imagick, Rdkafka) ---
     $needsPhp = ($effectiveComponent -in 'all', 'php')
     $needsXdebug = ($effectiveComponent -in 'all', 'xdebug')
     $needsImagick = ($effectiveComponent -in 'all', 'imagick')
+    $needsRdkafka = ($effectiveComponent -in 'all', 'rdkafka')
 
-    if ($needsPhp -or $needsXdebug -or $needsImagick) {
+    if ($needsPhp -or $needsXdebug -or $needsImagick -or $needsRdkafka) {
         $phpArchiveFiles = if ($needsPhp) { Invoke-RemoteListing -Url $baseUrl.PHP -Quiet:$Quiet } else { @() }
         $phpReleaseFiles = if ($needsPhp) { Invoke-RemoteListing -Url $baseUrl.PHP_RELEASE -Quiet:$Quiet } else { @() }
         $phpChecksumMap  = if ($needsPhp) { Get-RemotePhpChecksumMap -BaseUrlRelease $baseUrl.PHP_RELEASE -Quiet:$Quiet } else { @{} }
@@ -704,6 +785,9 @@ function Invoke-BaseUpdater {
 
         $imagickBaseUrl = if ($baseUrl.PSObject.Properties['IMAGICK']) { $baseUrl.IMAGICK } else { 'https://windows.php.net/downloads/pecl/releases/imagick/' }
         $imagickFiles   = if ($needsImagick) { Get-RemoteImagickFiles -ImagickBaseUrl $imagickBaseUrl -Quiet:$Quiet } else { @() }
+
+        $rdkafkaBaseUrl = if ($baseUrl.PSObject.Properties['RDKAFKA']) { $baseUrl.RDKAFKA } else { 'https://windows.php.net/downloads/pecl/releases/rdkafka/' }
+        $rdkafkaFiles   = if ($needsRdkafka) { Get-RemoteRdkafkaFiles -RdkafkaBaseUrl $rdkafkaBaseUrl -Quiet:$Quiet } else { @() }
 
         foreach ($versionKey in $phpVersions.PSObject.Properties.Name) {
             if (-not (Test-PhpVersionMatch -VersionKey $versionKey -FilterList $effectivePhpVersion)) {
@@ -799,6 +883,25 @@ function Invoke-BaseUpdater {
                     })
                     if ($Action -eq 'update') {
                         $phpVersions.$versionKey.imagick = $latestImagickName
+                    }
+                }
+            }
+
+            # Check Rdkafka package
+            if ($needsRdkafka) {
+                $currentRdkafka = if ($entry.PSObject.Properties['rdkafka']) { $entry.rdkafka } else { $null }
+                $latestRdkafkaName = Find-LatestRdkafkaPackage -Files $rdkafkaFiles -PhpMajorMinor $phpMajorMinor -Type $type -Prefer64 $Config.Prefer64
+                if ($latestRdkafkaName -and $currentRdkafka -ne $latestRdkafkaName) {
+                    $changes.Add([PSCustomObject]@{
+                        Component = 'Rdkafka'
+                        Key       = $versionKey
+                        Field     = 'rdkafka'
+                        File      = $Config.ResolvedJsonPath
+                        Current   = $currentRdkafka
+                        Latest    = $latestRdkafkaName
+                    })
+                    if ($Action -eq 'update') {
+                        $phpVersions.$versionKey.rdkafka = $latestRdkafkaName
                     }
                 }
             }
@@ -910,15 +1013,16 @@ function Show-InteractiveMenu {
         Write-Host " [5] Check / Update Nginx"
         Write-Host " [6] Check / Update Xdebug Only"
         Write-Host " [7] Check / Update Imagick PECL Only"
-        Write-Host " [8] Check / Update Specific PHP Version (e.g. 8.2, 8.4)"
+        Write-Host " [8] Check / Update Rdkafka PECL Only"
+        Write-Host " [9] Check / Update Specific PHP Version (e.g. 8.2, 8.4)"
         Write-Host ""
         Write-Host " Configuration Settings:" -ForegroundColor Yellow
-        Write-Host " [9] Toggle Nginx Branch (Current: $($Config.NginxBranch))"
-        Write-Host " [10] Toggle Architecture Preference (Current: $(if ($Config.Prefer64) { 'x64' } else { 'x86' }))"
+        Write-Host " [10] Toggle Nginx Branch (Current: $($Config.NginxBranch))"
+        Write-Host " [11] Toggle Architecture Preference (Current: $(if ($Config.Prefer64) { 'x64' } else { 'x86' }))"
         Write-Host " [0] Exit"
         Write-Host "---------------------------------------------------" -ForegroundColor DarkGray
 
-        $choice = Read-Host "Select option [0-10]"
+        $choice = Read-Host "Select option [0-11]"
         switch ($choice) {
             '1' {
                 Invoke-BaseUpdater -Config $Config -Action 'check' -Component 'all'
@@ -964,6 +1068,12 @@ function Show-InteractiveMenu {
                 Pause-Console
             }
             '8' {
+                $subChoice = Read-Host "Rdkafka PECL: [1] Dry-Run Check, [2] Apply Updates. Select [1/2]"
+                $act = if ($subChoice -eq '2') { 'update' } else { 'check' }
+                Invoke-BaseUpdater -Config $Config -Action $act -Component 'rdkafka'
+                Pause-Console
+            }
+            '9' {
                 $targetVer = Read-Host "Enter PHP Version (e.g. 8.2 or 82)"
                 if (-not [string]::IsNullOrWhiteSpace($targetVer)) {
                     $apply = Read-Host "Apply updates if found? (y/N)"
@@ -972,12 +1082,12 @@ function Show-InteractiveMenu {
                     Pause-Console
                 }
             }
-            '9' {
+            '10' {
                 $Config.NginxBranch = if ($Config.NginxBranch -eq 'stable') { 'mainline' } else { 'stable' }
                 Write-Host "Nginx release branch set to: $($Config.NginxBranch)" -ForegroundColor Green
                 Start-Sleep -Seconds 1
             }
-            '10' {
+            '11' {
                 $Config.Prefer64 = -not $Config.Prefer64
                 Write-Host "Architecture preference set to: $(if ($Config.Prefer64) { 'x64' } else { 'x86' })" -ForegroundColor Green
                 Start-Sleep -Seconds 1
@@ -986,7 +1096,7 @@ function Show-InteractiveMenu {
                 return
             }
             default {
-                Write-Host "Invalid choice, please select between 0 and 10." -ForegroundColor Yellow
+                Write-Host "Invalid choice, please select between 0 and 11." -ForegroundColor Yellow
                 Start-Sleep -Seconds 1
             }
         }
